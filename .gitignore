@@ -1,0 +1,61 @@
+# Environment variables
+.env
+.env.local
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+
+# Database files (too large for git)
+*.db
+*.sqlite
+*.sqlite3
+
+# Data files (too large)
+*.csv
+*.jsonl
+*.json
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Streamlit
+.streamlit/
+
+# Logs
+*.log
+training_log.txt
+
+# Checkpoints and model files
+checkpoints/
+*.pt
+*.pth
+*.bin
+*.safetensors
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.bak
+
+# Adult dataset (if downloaded)
+adult/
+spider/database/
+
+# Spider fine-tuning data
+ft_spider/data/
+ft_spider/checkpoints/
+
