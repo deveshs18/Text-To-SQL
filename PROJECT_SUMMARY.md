@@ -552,3 +552,4 @@ Initial Generation → Execute → Error?
 
 This project demonstrates a complete, production-ready Text-to-SQL system with evaluation, comparison, and multiple prompting strategies for research and practical use.
 
+
