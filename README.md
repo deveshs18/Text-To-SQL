@@ -19,6 +19,12 @@ A comprehensive text-to-SQL system that compares two state-of-the-art models:
 - **OpenAI API Key** (for GPT-4o-mini)
 - **Windows/Linux/MacOS**
 
+## Important Notes
+
+- **Fine-tuned Model Included**: The `arctic_lora_model/` directory contains the fine-tuned LoRA adapters. The base model will be downloaded automatically from Hugging Face when you first run the server.
+- **No GGUF Model Needed**: The large GGUF model file (370MB+) is not included in this repository. It's not needed since we use the fine-tuned model directly via the server.
+- **Database Setup**: You'll need to set up your database (see Database Setup section below).
+
 ## Installation
 
 ### 1. Clone the Repository
@@ -131,9 +137,11 @@ python text2sql/scripts/finetuned_arctic_server.py
 ```
 
 The server will:
-- Load the base Arctic model (Snowflake/Arctic-Text2SQL-R1-7B)
-- Apply your LoRA adapters from `arctic_lora_model/`
+- **Automatically download** the base Arctic model (Snowflake/Arctic-Text2SQL-R1-7B) from Hugging Face on first run (~14GB, but uses 4-bit quantization)
+- Load your LoRA adapters from `arctic_lora_model/` (already included in repository)
 - Start serving on `http://localhost:11437`
+
+**Note**: The first time you run this, it will download the base model (~14GB). This is a one-time download. Subsequent runs will use the cached model.
 
 **Expected output:**
 ```
@@ -232,11 +240,13 @@ streamlit run text2sql/app.py
 │   │   ├── setup_database.py           # Database setup
 │   │   └── load_csv_to_db.py           # CSV loader
 │   └── requirements.txt
-├── arctic_lora_model/            # Fine-tuned LoRA adapters
-├── models/                       # Model files (if any)
+├── arctic_lora_model/            # Fine-tuned LoRA adapters (included in repo)
+├── models/                       # (Empty - large model files excluded via .gitignore)
 ├── adult/                        # Adult income dataset
-├── income.db                     # SQLite database
-└── .env                          # Environment variables
+├── income.db                     # SQLite database (created by setup script)
+└── .env                          # Environment variables (create this file)
+
+**Note**: The base Arctic model (~14GB) is NOT included. It will be automatically downloaded from Hugging Face when you first run `finetuned_arctic_server.py`.
 ```
 
 ## Troubleshooting
