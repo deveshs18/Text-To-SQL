@@ -307,23 +307,35 @@ streamlit run text2sql/app.py
 
 ## Fine-tuning Your Own Model
 
-If you want to fine-tune the Arctic model further:
+If you want to fine-tune the Arctic model or train a completely new model:
+
+**📖 See detailed guide:** `TRAINING_AND_SWITCHING_MODELS.md`
+
+**Quick steps:**
 
 1. **Prepare your dataset** in Alpaca format (see `ft_spider/data/spider_alpaca_full.json` for example)
 
-2. **Run fine-tuning:**
+2. **Configure training** (edit `text2sql/scripts/finetune_arctic.py`):
+   - `OUTPUT_DIR`: Directory name for your model adapters
+   - `DATASET_PATH`: Path to your training dataset
+   - `TRAINING_SUBSET_SIZE`: Number of examples (None for full dataset)
+
+3. **Run fine-tuning:**
    ```bash
    python text2sql/scripts/finetune_arctic.py
    ```
 
-3. **Configuration** (in `finetune_arctic.py`):
-   - `TRAINING_SUBSET_SIZE`: Number of examples (None for full dataset)
-   - `num_train_epochs`: Training epochs
-   - `learning_rate`: Learning rate (default: 1e-4)
+4. **Create server for your model:**
+   - Copy `finetuned_arctic_server.py` to `your_model_server.py`
+   - Update `LORA_MODEL` and port number
+   - Start server: `python text2sql/scripts/your_model_server.py`
 
-4. **After training:**
-   - LoRA adapters saved to `arctic_lora_model/`
-   - Restart `finetuned_arctic_server.py` to use new adapters
+5. **Switch models in Streamlit:**
+   - Change `MODEL_NAME` in `.env` or Streamlit sidebar
+   - Use `ollama/your-model-name` for your model
+   - Use `openai/gpt-4o-mini` for GPT-4o-mini
+
+**For complete instructions on training, server setup, and model switching, see `TRAINING_AND_SWITCHING_MODELS.md`**
 
 ## Evaluation Scripts
 
