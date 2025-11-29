@@ -1,0 +1,18 @@
+================================================================================
+TIMING COMPARISON: Ollama vs GPT-4o-mini
+================================================================================
+
+    Technique Ollama (minutes) GPT-4o-mini (minutes) Speedup (GPT vs Ollama) Time Saved
+     Few-Shot             14.0                   0.4                   31.9x   13.6 min
+          CoT             28.0                   2.2                   12.8x   25.8 min
+          LtM             28.0                   2.0                   14.1x   26.0 min
+           EG             28.0                   1.1                   26.4x   26.9 min
+TOTAL (All 4)             98.0                   5.7                   17.3x   92.3 min
+
+================================================================================
+
+Notes:
+- Ollama timing: Actual measured times from evaluation
+- GPT-4o-mini timing: From terminal output (EG: 1.2 min) and estimates
+- Speedup: How many times faster GPT is compared to Ollama
+- Time Saved: Difference in minutes between Ollama and GPT

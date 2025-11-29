@@ -1,110 +1,99 @@
-"""Database utilities: SQLAlchemy engine, SQL validation, and read-only execution."""
-import re
+"""Database utilities: engine creation, SQL validation, and execution."""
 import time
-from typing import Tuple, Optional
 import pandas as pd
-from sqlalchemy import create_engine, text
-from sqlalchemy.exc import SQLAlchemyError
 import sqlglot
+from sqlalchemy import create_engine, text
+from typing import Tuple, Optional
 
 
 def get_engine(db_url: str):
-    """Create SQLAlchemy engine from DB_URL."""
+    """Create SQLAlchemy engine from database URL."""
     return create_engine(db_url, echo=False)
 
 
-def validate_sql(sql: str, use_sqlglot: bool = True) -> Tuple[bool, Optional[str]]:
+def validate_sql(sql: str) -> Tuple[bool, Optional[str]]:
     """
-    Validate SQL: must be SELECT or WITH (CTE).
-    Reject multiple statements.
-    Return (is_valid, error_message).
+    Validate SQL query.
+    Returns (is_valid, error_message).
+    Ensures:
+    - SQL is syntactically valid
+    - Only SELECT/WITH statements (read-only)
+    - Single statement only
     """
-    sql_orig = sql.strip()
+    if not sql or not sql.strip():
+        return False, "Empty SQL query"
     
-    # Remove trailing semicolon
-    sql = sql_orig.rstrip(';').strip()
+    sql_clean = sql.strip().rstrip(';')
     
-    if not sql:
-        return False, "Empty SQL statement"
-    
-    # Case-insensitive check for SELECT or WITH
-    sql_upper = sql.upper().strip()
+    # Check if starts with SELECT or WITH
+    sql_upper = sql_clean.upper()
     if not (sql_upper.startswith('SELECT') or sql_upper.startswith('WITH')):
-        return False, "Only SELECT and WITH (CTE) statements are allowed"
+        return False, "SQL must start with SELECT or WITH (read-only queries only)"
     
-    # Reject multiple statements (check original before removing semicolon)
-    if sql_orig.count(';') > 1 or (sql_orig.count(';') == 1 and not sql_orig.rstrip().endswith(';')):
-        return False, "Multiple statements not allowed"
+    # Check for dangerous keywords
+    dangerous_keywords = ['DROP', 'DELETE', 'INSERT', 'UPDATE', 'ALTER', 'CREATE', 'TRUNCATE']
+    for keyword in dangerous_keywords:
+        if f' {keyword} ' in sql_upper or sql_upper.startswith(keyword + ' '):
+            return False, f"SQL contains dangerous keyword: {keyword} (read-only queries only)"
     
-    # Optional: sqlglot parsing (wrapped in try/except, don't access .kind)
-    if use_sqlglot:
-        try:
-            # Just verify it parses - don't check .kind as it may not exist
-            sqlglot.parse_one(sql, read='sqlite')
-        except Exception:
-            # If parsing fails, fall back to basic check
-            # The basic check above already ensures it starts with SELECT or WITH
-            pass
-    
-    return True, None
-
-
-def add_limit_if_missing(sql: str, limit: int = 100) -> str:
-    """Add LIMIT clause if missing, preserving existing LIMIT if present."""
-    sql = sql.strip().rstrip(';')
-    sql_upper = sql.upper()
-    
-    # Check if LIMIT already exists
-    if 'LIMIT' in sql_upper:
-        return sql
-    
-    # Simple append (works for most cases)
-    return f"{sql} LIMIT {limit}"
+    # Validate syntax using sqlglot
+    try:
+        parsed = sqlglot.parse_one(sql_clean, read='sqlite')
+        if parsed is None:
+            return False, "Failed to parse SQL"
+        
+        # Check for multiple statements
+        statements = sqlglot.parse(sql_clean, read='sqlite')
+        if len(statements) > 1:
+            return False, "Multiple statements detected (only single statement allowed)"
+        
+        return True, None
+    except Exception as e:
+        return False, f"SQL syntax error: {str(e)}"
 
 
 def execute_sql(
     sql: str,
     engine,
     add_limit: bool = True,
-    limit: int = 100,
-    max_rows: int = 100
+    max_rows: int = 1000
 ) -> Tuple[bool, Optional[pd.DataFrame], Optional[str], float]:
     """
-    Execute SQL query read-only.
-    Return (success, dataframe, error_message, latency_sec).
+    Execute SQL query and return results.
+    Returns: (success, dataframe, error_message, execution_latency)
+    
+    Args:
+        sql: SQL query string
+        engine: SQLAlchemy engine
+        add_limit: If True and no LIMIT exists, add LIMIT max_rows
+        max_rows: Maximum rows to return (if add_limit=True)
     """
     start_time = time.time()
     
-    # Validate first
-    is_valid, error = validate_sql(sql)
-    if not is_valid:
-        return False, None, error, time.time() - start_time
+    if not sql or not sql.strip():
+        return False, None, "Empty SQL query", 0.0
     
-    # Add limit if requested
+    sql_clean = sql.strip().rstrip(';')
+    
+    # Add LIMIT if requested and not present
     if add_limit:
-        sql = add_limit_if_missing(sql, limit)
+        sql_upper = sql_clean.upper()
+        if 'LIMIT' not in sql_upper:
+            sql_clean = f"{sql_clean} LIMIT {max_rows}"
     
     try:
         with engine.connect() as conn:
-            result = conn.execute(text(sql))
+            result = conn.execute(text(sql_clean))
             rows = result.fetchall()
             columns = result.keys()
             
+            # Convert to DataFrame
             df = pd.DataFrame(rows, columns=columns)
-            
-            # Truncate to max_rows for display
-            if len(df) > max_rows:
-                df = df.head(max_rows)
             
             latency = time.time() - start_time
             return True, df, None, latency
             
-    except SQLAlchemyError as e:
-        error_msg = str(e)
-        latency = time.time() - start_time
-        return False, None, error_msg, latency
     except Exception as e:
-        error_msg = f"Unexpected error: {str(e)}"
         latency = time.time() - start_time
+        error_msg = str(e)
         return False, None, error_msg, latency
-

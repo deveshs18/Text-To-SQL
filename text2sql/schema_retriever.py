@@ -121,3 +121,5 @@ def expand_schema_snippet(engine, table_name: str = "adult_income", peek_values:
     return base_snippet
 
 
+
+

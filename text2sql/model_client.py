@@ -19,7 +19,10 @@ def extract_sql_from_output(text: str) -> str:
     text = text.strip()
     sql = None
     
-    # Look for SQL: marker
+    # For fine-tuned models, the output should be just SQL (from Response section)
+    # But it might also include "SQL:" prefix or other text
+    
+    # Look for SQL: marker (might be at start of response)
     sql_marker = re.search(r'SQL:\s*(.*)', text, re.IGNORECASE | re.DOTALL)
     if sql_marker:
         sql = sql_marker.group(1).strip()
@@ -41,9 +44,12 @@ def extract_sql_from_output(text: str) -> str:
         if code_block:
             sql = code_block.group(1).strip()
     
-    # If no markers found, use entire text
+    # If no markers found, use entire text (for fine-tuned models, this should be just SQL)
     if not sql:
         sql = text.strip()
+    
+    # Remove any leading "SQL:" if present (fine-tuned model might add it)
+    sql = re.sub(r'^SQL:\s*', '', sql, flags=re.IGNORECASE).strip()
     
     # Validate that SQL starts with SELECT or WITH
     sql_upper = sql.upper().strip()
@@ -53,6 +59,9 @@ def extract_sql_from_output(text: str) -> str:
             "The model may have generated invalid output."
         )
     
+    return sql
+
+
     return sql
 
 
@@ -82,7 +91,8 @@ def generate_sql(
     if model_name.startswith("ollama/"):
         model = model_name.replace("ollama/", "")
         if ollama_base_url is None:
-            ollama_base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+            # Default to fine-tuned Arctic server (port 11437)
+            ollama_base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11437")
         
         url = f"{ollama_base_url}/api/generate"
         payload = {
@@ -173,7 +183,7 @@ def generate_sql(
             raise Exception(f"OpenAI API error: {str(e)}")
     
     else:
-        raise ValueError(f"Unknown model format: {model_name}. Use 'ollama/model' or 'openai/model'")
+        raise ValueError(f"Unknown model format: {model_name}. Use 'ollama/arctic-finetuned' or 'openai/gpt-4o-mini'")
 
 
 def refine_sql(
@@ -188,4 +198,119 @@ def refine_sql(
     Returns (sql_string, metrics_dict).
     """
     return generate_sql(refine_prompt, model_name, temperature, ollama_base_url)
+
+
+async def generate_sql_async(
+    prompt: str,
+    model_name: str,
+    temperature: float = 0.1,
+    ollama_base_url: Optional[str] = None
+) -> Tuple[str, Dict]:
+    """
+    Async version of generate_sql.
+    """
+    import time
+    import aiohttp
+    from openai import AsyncOpenAI
+    
+    start_time = time.time()
+    metrics = {
+        "tokens_used": 0,
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "latency": 0.0
+    }
+    
+    if model_name.startswith("ollama/"):
+        model = model_name.replace("ollama/", "")
+        if ollama_base_url is None:
+            # Default to fine-tuned Arctic server (port 11437)
+            ollama_base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11437")
+        
+        url = f"{ollama_base_url}/api/generate"
+        payload = {
+            "model": model,
+            "prompt": prompt,
+            "stream": False,
+            "options": {
+                "temperature": temperature
+            }
+        }
+        
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.post(url, json=payload, timeout=120) as response:
+                    response.raise_for_status()
+                    result = await response.json()
+                    output = result.get("response", "")
+            
+            # Estimate tokens
+            metrics["input_tokens"] = len(prompt) // 4
+            metrics["output_tokens"] = len(output) // 4
+            metrics["tokens_used"] = metrics["input_tokens"] + metrics["output_tokens"]
+            metrics["latency"] = time.time() - start_time
+            
+            try:
+                sql = extract_sql_from_output(output)
+                return sql, metrics
+            except ValueError as ve:
+                raise ValueError(f"Invalid SQL extraction: {str(ve)}")
+        except ValueError:
+            raise
+        except Exception as e:
+            raise Exception(f"Ollama API error: {str(e)}")
+            
+    elif model_name.startswith("openai/"):
+        model = model_name.replace("openai/", "")
+        api_key = os.getenv("OPENAI_API_KEY")
+        
+        if not api_key:
+            raise Exception("OPENAI_API_KEY not found in environment")
+            
+        try:
+            client = AsyncOpenAI(api_key=api_key)
+            response = await client.chat.completions.create(
+                model=model,
+                messages=[
+                    {"role": "system", "content": "You are a SQL expert. Generate valid SQL queries."},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=temperature,
+                timeout=120
+            )
+            output = response.choices[0].message.content
+            
+            if hasattr(response, 'usage'):
+                metrics["input_tokens"] = response.usage.prompt_tokens
+                metrics["output_tokens"] = response.usage.completion_tokens
+                metrics["tokens_used"] = response.usage.total_tokens
+            else:
+                metrics["input_tokens"] = len(prompt) // 4
+                metrics["output_tokens"] = len(output) // 4
+                metrics["tokens_used"] = metrics["input_tokens"] + metrics["output_tokens"]
+                
+            metrics["latency"] = time.time() - start_time
+            
+            try:
+                sql = extract_sql_from_output(output)
+                return sql, metrics
+            except ValueError as ve:
+                raise ValueError(f"Invalid SQL extraction: {str(ve)}")
+        except ValueError:
+            raise
+        except Exception as e:
+            raise Exception(f"OpenAI API error: {str(e)}")
+    
+    else:
+        raise ValueError(f"Unknown model format: {model_name}")
+
+
+async def refine_sql_async(
+    refine_prompt: str,
+    model_name: str,
+    temperature: float = 0.2,
+    ollama_base_url: Optional[str] = None
+) -> Tuple[str, Dict]:
+    """Async version of refine_sql."""
+    return await generate_sql_async(refine_prompt, model_name, temperature, ollama_base_url)
 

@@ -197,211 +197,124 @@ def is_complex_query(question: str) -> bool:
     return False
 
 
-def build_few_shot_prompt(schema: str, question: str) -> str:
-    """Build Few-Shot prompt with simple examples."""
-    # Original simple few-shot examples (hardcoded to adult_income)
-    examples = [
-        {
-            "question": "Average hours_per_week by education (top 10).",
-            "sql": "SELECT education, AVG(hours_per_week) AS avg_hours FROM adult_income GROUP BY education ORDER BY avg_hours DESC LIMIT 10;"
-        },
-        {
-            "question": "Top 5 occupation by count where income = '>50K'.",
-            "sql": "SELECT occupation, COUNT(*) AS count FROM adult_income WHERE income = '>50K' GROUP BY occupation ORDER BY count DESC LIMIT 5;"
-        },
-        {
-            "question": "Count by race and sex.",
-            "sql": "SELECT race, sex, COUNT(*) AS count FROM adult_income GROUP BY race, sex ORDER BY count DESC LIMIT 100;"
-        },
-        {
-            "question": "How many people have sex = 'Female'?",
-            "sql": "SELECT COUNT(*) AS count FROM adult_income WHERE sex = 'Female';"
-        },
-    ]
+
+# Removed expand_schema_snippet import - schema is already a string from get_schema_snippet
+
+def format_for_model(instruction, content, model_name):
+    """
+    Format the prompt based on the model.
+    - Fine-tuned: Uses Alpaca format with specific instruction (matches training data).
+    - Others: Concatenates instruction and content.
+    """
+    import os
+    # Check if using fine-tuned Arctic model (port 11437 - uses Alpaca format from training)
+    is_finetuned_arctic = (
+        "arctic" in model_name.lower() and "finetuned" in model_name.lower() or
+        os.getenv("OLLAMA_BASE_URL", "").endswith("11437")  # Fine-tuned Arctic server port
+    )
     
-    prompt = f"""You are a SQL expert. Generate valid SQL queries using only the provided schema. Output a single SQL statement.
+    # Check if using fine-tuned model (either by model name or OLLAMA_BASE_URL)
+    is_finetuned = (
+        "finetuned" in model_name.lower() or 
+        is_finetuned_arctic  # Fine-tuned Arctic
+    )
+    
+    if is_finetuned or is_finetuned_arctic:
+        # EXACT format from training data (prepare_spider_data.py line 70)
+        # Input must end with "\nSQL:" and Response should be just SQL
+        return f"""Below is an instruction that describes a task, paired with an input that provides further context. Write a response that appropriately completes the request.
 
-SCHEMA:
-{schema}
+### Instruction:
+{instruction}
 
-Examples:
+### Input:
+{content}
+SQL:
 
+### Response:
 """
-    
-    for ex in examples:
-        prompt += f"Q: {ex['question']}\nSQL: {ex['sql']}\n\n"
-    
-    prompt += f"Q: {question}\nSQL:"
-    return prompt
-
-
-def build_cot_prompt(schema: str, question: str) -> str:
-    """Build Chain-of-Thought prompt with explicit reasoning steps, enhanced for complex queries. Fully dynamic."""
-    # Extract table name for reference (though not hardcoded in guidance)
-    table_name = extract_table_name_from_schema(schema)
-    
-    is_complex = is_complex_query(question)
-    
-    if is_complex:
-        prompt = f"""You are a SQL expert. Generate a valid SQL query using only the provided schema. This appears to be a COMPLEX query that may require CTEs (WITH clauses) and window functions.
-
-SCHEMA:
-{schema}
-
-Question: {question}
-
-Think step by step:
-
-1. **Identify what needs to be calculated:**
-   - What aggregations are needed? (COUNT, AVG, percentage, etc.)
-   - Are there any "most common" or "top" items per group? (This requires ROW_NUMBER() window function)
-   - What groups are needed? (GROUP BY columns)
-
-2. **Plan the query structure:**
-   - For complex queries with multiple steps, use CTEs (WITH clauses)
-   - If finding "most common X per group", create a CTE with ROW_NUMBER() OVER (PARTITION BY ... ORDER BY ...)
-   - If calculating percentages, use AVG(CASE WHEN condition THEN 1.0 ELSE 0.0 END)
-   - Aggregate statistics in a separate CTE
-   - Join CTEs together in the final SELECT
-
-3. **Write CTEs (if needed):**
-   - CTE 1: Count occurrences (e.g., occupation counts per group)
-   - CTE 2: Find top item using ROW_NUMBER() OVER (PARTITION BY group ORDER BY count DESC)
-   - CTE 3: Aggregate statistics (COUNT, AVG, percentages)
-
-4. **Final SELECT:**
-   - Join CTEs together
-   - Format output with ROUND() where appropriate
-   - Add ORDER BY and LIMIT if specified
-
-5. **Generate the complete SQL statement:**
-
-SQL:"""
     else:
-        prompt = f"""You are a SQL expert. Generate a valid SQL query using only the provided schema. Prefer LIMIT 100 if not specified.
+        return f"{instruction}\n\n{content}\n\nSQL:"
 
-SCHEMA:
-{schema}
-
-Question: {question}
-
-Think step by step:
-
-1. Identify relevant columns from the schema that match the question.
-2. Determine any filters (WHERE clauses) needed.
-3. Identify any aggregations (GROUP BY, COUNT, AVG, etc.) required.
-4. Determine sorting (ORDER BY) and limits if specified.
-5. Write the final SQL statement.
-
-SQL:"""
+def build_few_shot_prompt(schema, question, examples=None, model_name=""):
+    """Build Few-Shot prompt."""
+    # schema is already a string from get_schema_snippet, use it directly
+    schema_text = schema if isinstance(schema, str) else str(schema)
     
-    return prompt
-
-
-def build_ltm_prompt(schema: str, question: str) -> str:
-    """Build Least-to-Most prompt with substeps."""
-    prompt = f"""You are a SQL expert. Generate a valid SQL query using only the provided schema. Prefer LIMIT 100 if not specified.
-
-SCHEMA:
-{schema}
-
-Question: {question}
-
-Break this down into substeps:
-
-A. Identify the main table and columns needed.
-B. Determine filtering conditions (if any).
-C. Determine grouping and aggregation (if any).
-D. Determine ordering and limits (if any).
-
-Now produce the complete SQL:
-
-SQL:"""
+    # Match training data instruction exactly
+    instruction = "You are a powerful text-to-SQL model. Your job is to generate valid SQL queries for the given schema and question."
     
-    return prompt
-
-
-def build_eg_prompt(schema: str, question: str) -> str:
-    """Build Execution-Guided prompt: direct SQL generation, enhanced for complex queries. Fully dynamic."""
-    is_complex = is_complex_query(question)
+    content = f"SCHEMA:\n{schema_text}\n"
+    if examples:
+        formatted_examples = []
+        for ex in examples:
+            if isinstance(ex, dict):
+                formatted_examples.append(f"Q: {ex.get('question', '')}\nSQL: {ex.get('sql', '')}")
+            else:
+                formatted_examples.append(str(ex))
+        content += "\nEXAMPLES:\n" + "\n\n".join(formatted_examples)
     
-    if is_complex:
-        prompt = f"""You are a SQL expert. Generate a valid SQL query using only the provided schema. This is a COMPLEX query that requires CTEs and possibly window functions.
-
-SCHEMA:
-{schema}
-
-Question: {question}
-
-IMPORTANT GUIDELINES FOR COMPLEX QUERIES:
-- Use WITH clauses (CTEs) to break down complex logic into steps
-- To find "most common X per group", use: ROW_NUMBER() OVER (PARTITION BY group_cols ORDER BY count DESC)
-- For percentages: AVG(CASE WHEN condition THEN 1.0 ELSE 0.0 END) * 100
-- Format numbers with ROUND(value, decimals)
-- Join CTEs in the final SELECT using LEFT JOIN on the grouping columns
-
-Generate the complete SQL statement:
-
-SQL:"""
-    else:
-        prompt = f"""You are a SQL expert. Generate a valid SQL query using only the provided schema. Prefer LIMIT 100 if not specified.
-
-SCHEMA:
-{schema}
-
-Question: {question}
-
-SQL:"""
+    content += f"\n\nQ: {question}"
     
-    return prompt
+    return format_for_model(instruction, content, model_name)
 
-
-def build_refine_prompt(
-    schema: str,
-    question: str,
-    failed_sql: str,
-    error_message: str
-) -> str:
-    """Build Execution-Guided refinement prompt, enhanced for complex queries. Fully dynamic."""
-    is_complex = is_complex_query(question)
+def build_cot_prompt(schema, question, model_name=""):
+    """Build Chain-of-Thought prompt."""
+    # schema is already a string from get_schema_snippet, use it directly
+    schema_text = schema if isinstance(schema, str) else str(schema)
     
-    if is_complex:
-        prompt = f"""The following SQL query failed with an error. Generate a corrected SQL query using CTEs if needed.
-
-SCHEMA:
-{schema}
-
-Question: {question}
-
-Failed SQL:
-{failed_sql}
-
-Error:
-{error_message}
-
-CORRECTION GUIDELINES:
-- If the query is complex, use WITH clauses (CTEs) to break it into steps
-- For "most common X per group": Create a CTE with counts, then use ROW_NUMBER() OVER (PARTITION BY group ORDER BY count DESC) to find top item
-- For percentages: Use AVG(CASE WHEN condition THEN 1.0 ELSE 0.0 END) * 100.0
-- Join CTEs properly: LEFT JOIN on all grouping columns
-- Use ROUND() for formatting numeric results
-- Ensure all columns in SELECT are either aggregated or in GROUP BY
-
-Corrected SQL:"""
-    else:
-        prompt = f"""The following SQL query failed with an error. Generate a corrected SQL query.
-
-SCHEMA:
-{schema}
-
-Question: {question}
-
-Failed SQL:
-{failed_sql}
-
-Error:
-{error_message}
-
-Corrected SQL:"""
+    instruction = "You are a powerful text-to-SQL model. Your job is to generate valid SQL queries for the given schema and question."
     
-    return prompt
+    # For fine-tuned: match training format (SCHEMA: ... Q: ...)
+    # CoT reasoning can be in the instruction or after Q:
+    content = f"""SCHEMA:
+{schema_text}
+
+Q: {question}"""
+
+    return format_for_model(instruction, content, model_name)
+
+def build_ltm_prompt(schema, question, model_name=""):
+    """Build Least-to-Most prompt."""
+    # schema is already a string from get_schema_snippet, use it directly
+    schema_text = schema if isinstance(schema, str) else str(schema)
+    
+    instruction = "You are a powerful text-to-SQL model. Your job is to generate valid SQL queries for the given schema and question."
+    
+    # Match training format: SCHEMA: ... Q: ...
+    content = f"""SCHEMA:
+{schema_text}
+
+Q: {question}"""
+
+    return format_for_model(instruction, content, model_name)
+
+def build_eg_prompt(schema, question, model_name=""):
+    """Build Execution-Guided prompt."""
+    # schema is already a string from get_schema_snippet, use it directly
+    schema_text = schema if isinstance(schema, str) else str(schema)
+    
+    instruction = "You are a powerful text-to-SQL model. Your job is to generate valid SQL queries for the given schema and question."
+    
+    # Match training format: SCHEMA: ... Q: ...
+    content = f"SCHEMA:\n{schema_text}\n\nQ: {question}"
+    
+    return format_for_model(instruction, content, model_name)
+
+def build_refine_prompt(schema, question, previous_sql, error_msg, model_name=""):
+    """Build Refinement prompt."""
+    # schema is already a string from get_schema_snippet, use it directly
+    schema_text = schema if isinstance(schema, str) else str(schema)
+    
+    instruction = "You are a powerful text-to-SQL model. Your job is to generate valid SQL queries for the given schema and question. The previous SQL query failed with an error. Fix the SQL query based on the error message."
+    
+    # Match training format: SCHEMA: ... Q: ...
+    content = f"""SCHEMA:
+{schema_text}
+
+Q: {question}
+
+Failed SQL: {previous_sql}
+Error: {error_msg}"""
+
+    return format_for_model(instruction, content, model_name)

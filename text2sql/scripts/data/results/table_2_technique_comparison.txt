@@ -1,0 +1,28 @@
+Table 2: Technique-by-Technique Comparison
+================================================================================
+
+      Model Technique Metric With RAG Without RAG Improvement
+     Ollama  Few-Shot     EX    59.0%       47.0%      +12.0%
+     Ollama  Few-Shot     SM    31.0%       31.0%       +0.0%
+     Ollama  Few-Shot     F1    0.719       0.717      +0.002
+GPT-4o-mini  Few-Shot     EX    68.0%       71.0%      +-3.0%
+GPT-4o-mini  Few-Shot     SM    37.0%       36.0%       +1.0%
+GPT-4o-mini  Few-Shot     F1    0.818       0.828     +-0.010
+     Ollama       CoT     EX    22.0%       14.0%       +8.0%
+     Ollama       CoT     SM    11.0%        7.0%       +4.0%
+     Ollama       CoT     F1    0.361       0.200      +0.161
+GPT-4o-mini       CoT     EX    37.0%       20.0%      +17.0%
+GPT-4o-mini       CoT     SM    12.0%        8.0%       +4.0%
+GPT-4o-mini       CoT     F1    0.630       0.437      +0.193
+     Ollama       LtM     EX    38.0%       23.0%      +15.0%
+     Ollama       LtM     SM    13.0%        9.0%       +4.0%
+     Ollama       LtM     F1    0.634       0.360      +0.274
+GPT-4o-mini       LtM     EX    65.0%       35.0%      +30.0%
+GPT-4o-mini       LtM     SM    24.0%       13.0%      +11.0%
+GPT-4o-mini       LtM     F1    0.751       0.515      +0.235
+     Ollama        EG     EX    25.0%       14.0%      +11.0%
+     Ollama        EG     SM     8.0%        7.0%       +1.0%
+     Ollama        EG     F1    0.422       0.231      +0.190
+GPT-4o-mini        EG     EX    24.0%       13.0%      +11.0%
+GPT-4o-mini        EG     SM    12.0%        7.0%       +5.0%
+GPT-4o-mini        EG     F1    0.584       0.420      +0.165

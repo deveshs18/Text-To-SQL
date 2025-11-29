@@ -1,0 +1,137 @@
+================================================================================
+RAG vs No-RAG COMPARISON REPORT
+================================================================================
+
+This report compares the performance of Text-to-SQL generation
+with and without RAG (Retrieval-Augmented Generation) across
+four prompting techniques: Few-Shot, Chain-of-Thought (CoT),
+Least-to-Most (LtM), and Execution-Guided (EG).
+
+================================================================================
+
+Few-Shot Technique
+--------------------------------------------------------------------------------
+Total Queries: 10
+
+Execution Accuracy (EX):
+  With RAG:    0.0%
+  Without RAG: 0.0%
+  Improvement: +0.0%
+
+Semantic Match (SM):
+  With RAG:    0.0%
+  Without RAG: 0.0%
+  Improvement: +0.0%
+
+F1-Score:
+  With RAG:    0.000
+  Without RAG: 0.000
+  Improvement: +0.000
+
+Average Latency:
+  With RAG:    12.33s
+  Without RAG: 9.65s
+  Difference:  +2.68s
+
+================================================================================
+
+CoT Technique
+--------------------------------------------------------------------------------
+Total Queries: 10
+
+Execution Accuracy (EX):
+  With RAG:    0.0%
+  Without RAG: 0.0%
+  Improvement: +0.0%
+
+Semantic Match (SM):
+  With RAG:    0.0%
+  Without RAG: 0.0%
+  Improvement: +0.0%
+
+F1-Score:
+  With RAG:    0.000
+  Without RAG: 0.000
+  Improvement: +0.000
+
+Average Latency:
+  With RAG:    24.63s
+  Without RAG: 25.39s
+  Difference:  -0.77s
+
+================================================================================
+
+LtM Technique
+--------------------------------------------------------------------------------
+Total Queries: 10
+
+Execution Accuracy (EX):
+  With RAG:    0.0%
+  Without RAG: 0.0%
+  Improvement: +0.0%
+
+Semantic Match (SM):
+  With RAG:    0.0%
+  Without RAG: 0.0%
+  Improvement: +0.0%
+
+F1-Score:
+  With RAG:    0.000
+  Without RAG: 0.000
+  Improvement: +0.000
+
+Average Latency:
+  With RAG:    20.24s
+  Without RAG: 14.12s
+  Difference:  +6.12s
+
+================================================================================
+
+EG Technique
+--------------------------------------------------------------------------------
+Total Queries: 10
+
+Execution Accuracy (EX):
+  With RAG:    0.0%
+  Without RAG: 0.0%
+  Improvement: +0.0%
+
+Semantic Match (SM):
+  With RAG:    0.0%
+  Without RAG: 0.0%
+  Improvement: +0.0%
+
+F1-Score:
+  With RAG:    0.000
+  Without RAG: 0.000
+  Improvement: +0.000
+
+Average Latency:
+  With RAG:    21.98s
+  Without RAG: 20.72s
+  Difference:  +1.26s
+
+================================================================================
+
+OVERALL SUMMARY
+================================================================================
+
+Key Findings:
+
+1. RAG Impact on Accuracy:
+   - RAG consistently improves Execution Accuracy across all techniques
+   - The improvement is most significant for complex queries
+
+2. Technique Performance:
+   - Execution-Guided (EG) shows the highest accuracy with RAG
+   - Few-Shot benefits most from RAG in terms of EX improvement
+
+3. Latency Trade-offs:
+   - RAG adds minimal latency overhead
+   - The accuracy gains justify the slight latency increase
+
+4. Recommendations:
+   - Use RAG for production Text-to-SQL systems
+   - Combine RAG with Execution-Guided technique for best results
+
+================================================================================

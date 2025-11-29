@@ -43,6 +43,10 @@ checkpoints/
 *.bin
 *.safetensors
 
+# Large model files (GGUF)
+*.gguf
+models/*.gguf
+
 # OS
 .DS_Store
 Thumbs.db
@@ -58,5 +62,7 @@ spider/database/
 # Spider fine-tuning data
 ft_spider/data/
 ft_spider/checkpoints/
+
+
 
 

@@ -1,11 +1,12 @@
 """Streamlit UI for Text-to-SQL with multiple prompting techniques."""
+import asyncio
 import streamlit as st
 import os
 import pandas as pd
 from dotenv import load_dotenv
 from db import get_engine, validate_sql, execute_sql
 from schema_retriever import get_schema_snippet, expand_schema_snippet
-from model_client import generate_sql, refine_sql
+from model_client import generate_sql, refine_sql, generate_sql_async, refine_sql_async
 from prompts import (
     build_few_shot_prompt,
     build_cot_prompt,
@@ -32,13 +33,26 @@ if "saved_results" not in st.session_state:
     st.session_state.saved_results = []
 
 
-def compute_score(success: bool, df: pd.DataFrame, latency: float) -> float:
-    """Compute technique score: 100 if success else 0, +10 if non-empty, -small latency penalty."""
-    if not success:
-        return 0.0
+def compute_score(success: bool, df: pd.DataFrame, latency: float, execution_match: bool = None) -> float:
+    """
+    Compute technique score prioritizing correctness.
+    - If execution_match is provided (evaluation mode): 200 if correct, 0 if wrong
+    - Otherwise: 100 if success, 0 if failed
+    - Bonus: +10 for non-empty results
+    - Penalty: -5 for high latency
+    """
+    # If we have evaluation data, prioritize correctness
+    if execution_match is not None:
+        if not execution_match:
+            return 0.0  # Wrong answer = 0 points
+        score = 200.0  # Correct answer = high score
+    else:
+        # No evaluation data, just check if it ran
+        if not success:
+            return 0.0
+        score = 100.0
     
-    score = 100.0
-    
+    # Bonus for non-empty results
     if df is not None and not df.empty:
         score += 10.0
     
@@ -210,6 +224,144 @@ def main():
         saved_results_tab()
 
 
+async def process_technique(technique, prompt, model_name, engine, eg_auto_refine, schema, question):
+    """Process a single technique asynchronously."""
+    sql = ""
+    refine_attempts = 0
+    try:
+        # Generate SQL
+        temperature = 0.2 if technique == "CoT" else 0.1
+        generation_metrics = {}
+        try:
+            sql, generation_metrics = await generate_sql_async(prompt, model_name, temperature=temperature)
+        except ValueError as ve:
+            # SQL extraction failed (doesn't start with SELECT/WITH)
+            # For EG, trigger refine; for others, treat as error
+            if technique == "EG" and eg_auto_refine:
+                # Try to refine with error message
+                try:
+                    refine_prompt = build_refine_prompt(
+                        schema, question, "", f"Model output invalid: {str(ve)}"
+                    )
+                    sql, refine_metrics = await refine_sql_async(refine_prompt, model_name, temperature=0.2)
+                    generation_metrics.update(refine_metrics)
+                    refine_attempts += 1
+                except Exception:
+                    return technique, {
+                        "success": False,
+                        "sql": "",
+                        "df": None,
+                        "error": f"SQL extraction failed: {str(ve)}",
+                        "latency": 0.0,
+                        "score": 0.0,
+                        "refine_attempts": refine_attempts,
+                        "tokens_used": generation_metrics.get("tokens_used", 0),
+                        "cost_usd": 0.0
+                    }
+            else:
+                return technique, {
+                    "success": False,
+                    "sql": "",
+                    "df": None,
+                    "error": f"SQL extraction failed: {str(ve)}",
+                    "latency": 0.0,
+                    "score": 0.0,
+                    "refine_attempts": 0,
+                    "tokens_used": 0,
+                    "cost_usd": 0.0
+                }
+        
+        # Validate
+        is_valid, error = validate_sql(sql)
+        
+        if not is_valid:
+            return technique, {
+                "success": False,
+                "sql": sql,
+                "df": None,
+                "error": error,
+                "latency": 0.0,
+                "score": 0.0,
+                "refine_attempts": refine_attempts,
+                "tokens_used": generation_metrics.get("tokens_used", 0),
+                "cost_usd": 0.0
+            }
+        
+        # Execute
+        success, df, err, exec_latency = execute_sql(sql, engine)
+        total_latency = generation_metrics.get("latency", 0.0) + exec_latency
+        
+        # Calculate cost (simplified)
+        tokens_used = generation_metrics.get("tokens_used", 0)
+        cost_usd = 0.0
+        if model_name.startswith("openai/"):
+            if "gpt-4o-mini" in model_name:
+                cost_usd = (tokens_used * 0.7 / 1_000_000) * 0.15 + (tokens_used * 0.3 / 1_000_000) * 0.60
+        
+        # EG auto-refine if enabled
+        if technique == "EG" and eg_auto_refine and (not success or df is None or df.empty):
+            # Try refinement (max 2 attempts total)
+            for attempt in range(2 - refine_attempts):
+                try:
+                    refine_prompt = build_refine_prompt(
+                        schema, question, sql, err or "Empty result"
+                    )
+                    refined_sql, refine_metrics = await refine_sql_async(refine_prompt, model_name, temperature=0.2)
+                    generation_metrics["tokens_used"] += refine_metrics.get("tokens_used", 0)
+                    generation_metrics["latency"] += refine_metrics.get("latency", 0.0)
+                    
+                    is_valid_refined, error_refined = validate_sql(refined_sql)
+                    if is_valid_refined:
+                        success_refined, df_refined, err_refined, latency_refined = execute_sql(refined_sql, engine)
+                        refine_attempts += 1
+                        sql = refined_sql
+                        success = success_refined
+                        df = df_refined
+                        err = err_refined
+                        exec_latency = latency_refined
+                        total_latency = generation_metrics.get("latency", 0.0) + exec_latency
+                        
+                        if success and df is not None and not df.empty:
+                            break
+                except ValueError as refine_ve:
+                    err = f"Refinement failed: {str(refine_ve)}"
+                    break
+                except Exception as refine_err:
+                    err = f"Refinement error: {str(refine_err)}"
+                    break
+        
+        score = compute_score(success, df, total_latency)
+        
+        return technique, {
+            "success": success,
+            "sql": sql,
+            "df": df,
+            "error": err,
+            "latency": total_latency,
+            "generation_latency": generation_metrics.get("latency", 0.0),
+            "execution_latency": exec_latency,
+            "score": score,
+            "refine_attempts": refine_attempts,
+            "tokens_used": tokens_used,
+            "input_tokens": generation_metrics.get("input_tokens", 0),
+            "output_tokens": generation_metrics.get("output_tokens", 0),
+            "cost_usd": cost_usd
+        }
+        
+    except Exception as e:
+        return technique, {
+            "success": False,
+            "sql": sql if sql else "",
+            "df": None,
+            "error": str(e),
+            "latency": 0.0,
+            "score": 0.0,
+            "refine_attempts": refine_attempts,
+            "tokens_used": 0,
+            "cost_usd": 0.0
+        }
+
+
 def main_query_tab():
     """Main tab for querying and generating SQL."""
     # Settings sidebar
@@ -217,8 +369,8 @@ def main_query_tab():
         st.header("⚙️ Settings")
         model_name = st.text_input(
             "Model Name",
-            value=os.getenv("MODEL_NAME", "ollama/llama3.1:8b"),
-            help="Format: 'ollama/model' or 'openai/model'"
+            value=os.getenv("MODEL_NAME", "openai/gpt-4o-mini"),
+            help="Format: 'ollama/arctic-finetuned' (port 11437) or 'openai/gpt-4o-mini'"
         )
         db_url = st.text_input(
             "Database URL",
@@ -226,6 +378,7 @@ def main_query_tab():
             help="SQLite path or connection string"
         )
         eg_auto_refine = st.checkbox("EG Auto-Refine", value=True, help="Automatically refine failed EG queries")
+        disable_rag = st.checkbox("🚫 Disable RAG (No Schema)", value=False, help="Hide schema from model to test performance without RAG")
         
         st.markdown("---")
         st.markdown("### 📊 Evaluation Mode")
@@ -253,164 +406,55 @@ def main_query_tab():
         # Get schema
         try:
             engine = get_engine(db_url)
-            schema = get_schema_snippet(question, engine)
             
-            with st.expander("📋 Schema Snippet", expanded=False):
-                st.code(schema)
+            if disable_rag:
+                # Even when RAG is disabled, provide table name so model knows which table to query
+                # But don't provide column names - this tests model's ability to infer structure
+                from schema_retriever import get_all_tables
+                tables = get_all_tables(engine)
+                if tables:
+                    # Use first table (or could be smarter about table selection)
+                    table_name = tables[0]
+                    schema = f"{table_name}(...)"  # Minimal schema: just table name, no columns
+                else:
+                    schema = ""
+                st.info("🚫 RAG Disabled: Only table name provided. Model must infer column names from the question.")
+            else:
+                schema = get_schema_snippet(question, engine)
+                
+                with st.expander("📋 Schema Snippet", expanded=False):
+                    st.code(schema)
         except Exception as e:
             st.error(f"Database connection error: {e}")
             return
         
         # Build prompts
         prompts = {
-            "Few-Shot": build_few_shot_prompt(schema, question),
-            "CoT": build_cot_prompt(schema, question),
-            "LtM": build_ltm_prompt(schema, question),
-            "EG": build_eg_prompt(schema, question)
+            "Few-Shot": build_few_shot_prompt(schema, question, model_name=model_name),
+            "CoT": build_cot_prompt(schema, question, model_name=model_name),
+            "LtM": build_ltm_prompt(schema, question, model_name=model_name),
+            "EG": build_eg_prompt(schema, question, model_name=model_name)
         }
         
         # Generate SQL for each technique
         results = {}
         
         with st.spinner("Generating SQL with all techniques..."):
-            for technique, prompt in prompts.items():
-                sql = ""
-                refine_attempts = 0
-                try:
-                    # Generate SQL
-                    temperature = 0.2 if technique == "CoT" else 0.1
-                    generation_metrics = {}
-                    try:
-                        sql, generation_metrics = generate_sql(prompt, model_name, temperature=temperature)
-                    except ValueError as ve:
-                        # SQL extraction failed (doesn't start with SELECT/WITH)
-                        # For EG, trigger refine; for others, treat as error
-                        if technique == "EG" and eg_auto_refine:
-                            # Try to refine with error message
-                            try:
-                                refine_prompt = build_refine_prompt(
-                                    schema, question, "", f"Model output invalid: {str(ve)}"
-                                )
-                                sql, refine_metrics = refine_sql(refine_prompt, model_name, temperature=0.2)
-                                generation_metrics.update(refine_metrics)
-                                refine_attempts += 1
-                            except Exception:
-                                results[technique] = {
-                                    "success": False,
-                                    "sql": "",
-                                    "df": None,
-                                    "error": f"SQL extraction failed: {str(ve)}",
-                                    "latency": 0.0,
-                                    "score": 0.0,
-                                    "refine_attempts": refine_attempts,
-                                    "tokens_used": generation_metrics.get("tokens_used", 0),
-                                    "cost_usd": 0.0
-                                }
-                                continue
-                        else:
-                            results[technique] = {
-                                "success": False,
-                                "sql": "",
-                                "df": None,
-                                "error": f"SQL extraction failed: {str(ve)}",
-                                "latency": 0.0,
-                                "score": 0.0,
-                                "refine_attempts": 0,
-                                "tokens_used": 0,
-                                "cost_usd": 0.0
-                            }
-                            continue
-                    
-                    # Validate
-                    is_valid, error = validate_sql(sql)
-                    
-                    if not is_valid:
-                        results[technique] = {
-                            "success": False,
-                            "sql": sql,
-                            "df": None,
-                            "error": error,
-                            "latency": 0.0,
-                            "score": 0.0,
-                            "refine_attempts": refine_attempts
-                        }
-                        continue
-                    
-                    # Execute
-                    success, df, err, exec_latency = execute_sql(sql, engine)
-                    total_latency = generation_metrics.get("latency", 0.0) + exec_latency
-                    
-                    # Calculate cost (simplified - can be enhanced)
-                    tokens_used = generation_metrics.get("tokens_used", 0)
-                    cost_usd = 0.0
-                    if model_name.startswith("openai/"):
-                        # Rough cost calculation (can be improved)
-                        if "gpt-4o-mini" in model_name:
-                            cost_usd = (tokens_used * 0.7 / 1_000_000) * 0.15 + (tokens_used * 0.3 / 1_000_000) * 0.60
-                    
-                    # EG auto-refine if enabled
-                    if technique == "EG" and eg_auto_refine and (not success or df is None or df.empty):
-                        # Try refinement (max 2 attempts total)
-                        for attempt in range(2 - refine_attempts):
-                            try:
-                                refine_prompt = build_refine_prompt(
-                                    schema, question, sql, err or "Empty result"
-                                )
-                                refined_sql, refine_metrics = refine_sql(refine_prompt, model_name, temperature=0.2)
-                                generation_metrics["tokens_used"] += refine_metrics.get("tokens_used", 0)
-                                generation_metrics["latency"] += refine_metrics.get("latency", 0.0)
-                                
-                                is_valid_refined, error_refined = validate_sql(refined_sql)
-                                if is_valid_refined:
-                                    success_refined, df_refined, err_refined, latency_refined = execute_sql(refined_sql, engine)
-                                    refine_attempts += 1
-                                    sql = refined_sql
-                                    success = success_refined
-                                    df = df_refined
-                                    err = err_refined
-                                    exec_latency = latency_refined
-                                    total_latency = generation_metrics.get("latency", 0.0) + exec_latency
-                                    
-                                    if success and df is not None and not df.empty:
-                                        break
-                            except ValueError as refine_ve:
-                                # Refined SQL also doesn't start with SELECT/WITH
-                                err = f"Refinement failed: {str(refine_ve)}"
-                                break
-                            except Exception as refine_err:
-                                err = f"Refinement error: {str(refine_err)}"
-                                break
-                    
-                    score = compute_score(success, df, total_latency)
-                    
-                    results[technique] = {
-                        "success": success,
-                        "sql": sql,
-                        "df": df,
-                        "error": err,
-                        "latency": total_latency,
-                        "generation_latency": generation_metrics.get("latency", 0.0),
-                        "execution_latency": exec_latency,
-                        "score": score,
-                        "refine_attempts": refine_attempts,
-                        "tokens_used": tokens_used,
-                        "input_tokens": generation_metrics.get("input_tokens", 0),
-                        "output_tokens": generation_metrics.get("output_tokens", 0),
-                        "cost_usd": cost_usd
-                    }
-                    
-                except Exception as e:
-                    results[technique] = {
-                        "success": False,
-                        "sql": sql if sql else "",
-                        "df": None,
-                        "error": str(e),
-                        "latency": 0.0,
-                        "score": 0.0,
-                        "refine_attempts": refine_attempts,
-                        "tokens_used": generation_metrics.get("tokens_used", 0),
-                        "cost_usd": 0.0
-                    }
+            async def run_parallel_generation():
+                tasks = []
+                for technique, prompt in prompts.items():
+                    tasks.append(process_technique(
+                        technique, prompt, model_name, engine, eg_auto_refine, schema, question
+                    ))
+                results_list = await asyncio.gather(*tasks)
+                return dict(results_list)
+            
+            # Run async loop
+            try:
+                results = asyncio.run(run_parallel_generation())
+            except Exception as e:
+                st.error(f"Async execution failed: {e}")
+                results = {}
         
         # Find best technique
         best_technique = max(results.keys(), key=lambda k: results[k]["score"])
