@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 from db import get_engine, validate_sql, execute_sql
 from schema_retriever import get_schema_snippet, expand_schema_snippet
 from model_client import generate_sql, refine_sql, generate_sql_async, refine_sql_async
-from prompts import (
+from text2sql.scripts.prompts import (
     build_few_shot_prompt,
     build_cot_prompt,
     build_ltm_prompt,
