@@ -23,8 +23,8 @@ model_lock = Lock()
 model = None
 tokenizer = None
 
-BASE_MODEL = "Snowflake/Arctic-Text2SQL-R1-7B"
-LORA_MODEL = "arctic_lora_model"
+BASE_MODEL = "Qwen/Qwen2.5-7B-Instruct"
+LORA_MODEL = "qwen2_5_7b_text2sql_lora"
 
 
 # ==============================
@@ -32,15 +32,18 @@ LORA_MODEL = "arctic_lora_model"
 # ==============================
 
 def load_finetuned_model():
-    """Load base model with LoRA adapters."""
+    """Load base Qwen model, optionally with LoRA adapters."""
     global model, tokenizer
 
     print("=" * 80)
-    print("LOADING FINE-TUNED ARCTIC MODEL")
+    print("LOADING QWEN MODEL (OPTIONAL LORA)")
     print("=" * 80)
 
-    if not os.path.exists(LORA_MODEL):
-        raise FileNotFoundError(f"LoRA adapters not found: {LORA_MODEL}")
+    use_lora = os.path.isdir(LORA_MODEL)
+    if use_lora:
+        print(f"LoRA directory found: {LORA_MODEL}")
+    else:
+        print(f"No LoRA directory found at {LORA_MODEL}. Running base Qwen only.")
 
     if not torch.cuda.is_available():
         raise RuntimeError("CUDA GPU is required for inference with this model.")
@@ -65,28 +68,35 @@ def load_finetuned_model():
         BASE_MODEL,
         trust_remote_code=True,
     )
-    tok_local.pad_token = tok_local.eos_token
+
+    # Qwen typically has eos token set; pad_token may be None
+    if tok_local.pad_token is None:
+        tok_local.pad_token = tok_local.eos_token
     tok_local.padding_side = "right"
 
-    print("✅ Base model loaded!")
+    print("✅ Base Qwen model loaded!")
 
-    print(f"\n[2/3] Loading LoRA adapters from: {LORA_MODEL}")
-    model_local = PeftModel.from_pretrained(model_local, LORA_MODEL)
-    print("✅ LoRA adapters loaded!")
+    if use_lora:
+        print(f"\n[2/3] Loading LoRA adapters from: {LORA_MODEL}")
+        model_local = PeftModel.from_pretrained(model_local, LORA_MODEL)
+        print("✅ LoRA adapters loaded!")
 
-    # Read training summary if available
-    summary_path = os.path.join(LORA_MODEL, "training_summary.json")
-    if os.path.exists(summary_path):
-        with open(summary_path, "r") as f:
-            summary = json.load(f)
-        print("\n📊 Training Summary:")
-        print(f"   Dataset size: {summary.get('dataset_size', 'N/A')} examples")
-        print(f"   Epochs: {summary.get('epochs', 'N/A')}")
-        print(f"   Trainable params: {summary.get('trainable_percentage', 'N/A')}")
+        # Optional: training summary if you created one for Qwen LoRA
+        summary_path = os.path.join(LORA_MODEL, "training_summary.json")
+        if os.path.exists(summary_path):
+            with open(summary_path, "r") as f:
+                summary = json.load(f)
+            print("\n📊 Training Summary:")
+            print(f"   Dataset size: {summary.get('dataset_size', 'N/A')} examples")
+            print(f"   Epochs: {summary.get('epochs', 'N/A')}")
+            print(f"   Trainable params: {summary.get('trainable_percentage', 'N/A')}")
+    else:
+        print("\n[2/3] Skipping LoRA — using base Qwen weights only.")
 
     print("\n[3/3] Model ready for inference!")
 
     return model_local, tok_local
+
 
 
 # ==============================
