@@ -20,7 +20,10 @@ ENV/
 # Data files (too large)
 *.csv
 *.jsonl
+# Exclude JSON except for model configs (needed for testing)
 *.json
+!qwen0p5b-spider-lora/*.json
+!qwen0p5b-spider-lora/**/*.json
 
 # IDE
 .vscode/
@@ -41,7 +44,9 @@ checkpoints/
 *.pt
 *.pth
 *.bin
+# Exclude safetensors except for LoRA adapters (needed for testing)
 *.safetensors
+!qwen0p5b-spider-lora/adapter_model.safetensors
 
 # Large model files (GGUF)
 *.gguf
@@ -62,6 +67,14 @@ spider/database/
 # Spider fine-tuning data
 ft_spider/data/
 ft_spider/checkpoints/
+
+# LoRA model checkpoints (exclude training checkpoints, keep main adapter)
+qwen0p5b-spider-lora/checkpoint-*/
+qwen0p5b-spider-lora/**/optimizer.pt
+qwen0p5b-spider-lora/**/scheduler.pt
+qwen0p5b-spider-lora/**/rng_state.pth
+qwen0p5b-spider-lora/**/training_args.bin
+qwen0p5b-spider-lora/**/trainer_state.json
 
 
 

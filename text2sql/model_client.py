@@ -51,6 +51,19 @@ def extract_sql_from_output(text: str) -> str:
     # Remove any leading "SQL:" if present (fine-tuned model might add it)
     sql = re.sub(r'^SQL:\s*', '', sql, flags=re.IGNORECASE).strip()
     
+    # Remove trailing backticks and markdown formatting (common issue with base Arctic model)
+    # Patterns: ```; or ``` or `; or ` at the end
+    sql = re.sub(r'[`]+;?\s*$', '', sql).strip()
+    sql = re.sub(r'```\s*;?\s*$', '', sql).strip()
+    sql = re.sub(r'`+\s*$', '', sql).strip()
+    
+    # Ensure semicolon after cleaning (if SQL is valid)
+    if sql and not sql.endswith(';'):
+        sql_upper = sql.upper().strip()
+        if sql_upper.startswith(('SELECT', 'WITH')):
+            if not any(sql_upper.endswith(ending) for ending in ['LIMIT', 'DESC', 'ASC', ')']):
+                sql = sql.rstrip() + ';'
+    
     # Validate that SQL starts with SELECT or WITH
     sql_upper = sql.upper().strip()
     if not (sql_upper.startswith('SELECT') or sql_upper.startswith('WITH')):
@@ -91,8 +104,16 @@ def generate_sql(
     if model_name.startswith("ollama/"):
         model = model_name.replace("ollama/", "")
         if ollama_base_url is None:
-            # Default to fine-tuned Arctic server (port 11437)
-            ollama_base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11437")
+            # Set URL based on model name
+            if "qwen-0.5b-base" in model_name.lower():
+                # Qwen base model uses port 11439
+                ollama_base_url = os.getenv("QWEN_BASE_SERVER_URL", "http://localhost:11439")
+            elif "qwen" in model_name.lower():
+                # Qwen finetuned model uses port 11438
+                ollama_base_url = os.getenv("QWEN_SERVER_URL", "http://localhost:11438")
+            else:
+                # Default to Arctic server (port 11437)
+                ollama_base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11437")
         
         url = f"{ollama_base_url}/api/generate"
         payload = {
@@ -105,7 +126,10 @@ def generate_sql(
         }
         
         try:
-            response = requests.post(url, json=payload, timeout=120)
+            # 2-minute timeout for all models (120 seconds)
+            # This prevents hanging - if server doesn't respond, fail fast
+            request_timeout = 120  # 2 minutes
+            response = requests.post(url, json=payload, timeout=request_timeout)
             response.raise_for_status()
             result = response.json()
             output = result.get("response", "")
@@ -155,7 +179,7 @@ def generate_sql(
                     {"role": "user", "content": prompt}
                 ],
                 temperature=temperature,
-                timeout=120
+                timeout=180 if "arctic" in model_name.lower() else 120  # Reduced timeout to prevent hanging
             )
             output = response.choices[0].message.content
             
@@ -183,7 +207,7 @@ def generate_sql(
             raise Exception(f"OpenAI API error: {str(e)}")
     
     else:
-        raise ValueError(f"Unknown model format: {model_name}. Use 'ollama/arctic-finetuned' or 'openai/gpt-4o-mini'")
+        raise ValueError(f"Unknown model format: {model_name}. Use 'ollama/arctic-base' or 'openai/gpt-4o-mini'")
 
 
 def refine_sql(
@@ -224,8 +248,16 @@ async def generate_sql_async(
     if model_name.startswith("ollama/"):
         model = model_name.replace("ollama/", "")
         if ollama_base_url is None:
-            # Default to fine-tuned Arctic server (port 11437)
-            ollama_base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11437")
+            # Set URL based on model name
+            if "qwen-0.5b-base" in model_name.lower():
+                # Qwen base model uses port 11439
+                ollama_base_url = os.getenv("QWEN_BASE_SERVER_URL", "http://localhost:11439")
+            elif "qwen" in model_name.lower():
+                # Qwen finetuned model uses port 11438
+                ollama_base_url = os.getenv("QWEN_SERVER_URL", "http://localhost:11438")
+            else:
+                # Default to Arctic server (port 11437)
+                ollama_base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11437")
         
         url = f"{ollama_base_url}/api/generate"
         payload = {
@@ -276,7 +308,7 @@ async def generate_sql_async(
                     {"role": "user", "content": prompt}
                 ],
                 temperature=temperature,
-                timeout=120
+                timeout=180 if "arctic" in model_name.lower() else 120  # Reduced timeout to prevent hanging
             )
             output = response.choices[0].message.content
             
