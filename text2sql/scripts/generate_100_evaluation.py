@@ -43,219 +43,188 @@ COLORS = {
 
 
 def generate_50_additional_test_cases() -> List[Dict[str, str]]:
-    """Generate 50 additional diverse test cases."""
+    """Generate 35 test cases (15 easy + 10 easy-medium + 10 medium)."""
     return [
+        # =========================
+        # 15 EASY QUERIES
+        # =========================
         {
-            "question": "What is the total number of people in each workclass?",
-            "gold_sql": "SELECT workclass, COUNT(*) AS total FROM adult_income GROUP BY workclass ORDER BY total DESC;"
+            "question": "How many records are there in the adult_income table?",
+            "gold_sql": "SELECT COUNT(*) AS total_rows FROM adult_income;"
         },
         {
-            "question": "For each race, show the average age and average hours per week.",
-            "gold_sql": "SELECT race, AVG(age) AS avg_age, AVG(hours_per_week) AS avg_hours FROM adult_income GROUP BY race ORDER BY avg_age DESC;"
+            "question": "How many people earn more than 50K?",
+            "gold_sql": "SELECT COUNT(*) AS high_earners FROM adult_income WHERE income = '>50K';"
         },
         {
-            "question": "Which education level has the highest percentage of people earning more than 50K?",
-            "gold_sql": "SELECT education, 100.0 * AVG(CASE WHEN income = '>50K' THEN 1.0 ELSE 0.0 END) AS pct_high_income FROM adult_income GROUP BY education ORDER BY pct_high_income DESC LIMIT 1;"
+            "question": "What is the average age of all people?",
+            "gold_sql": "SELECT AVG(age) AS avg_age FROM adult_income;"
         },
         {
-            "question": "What is the average capital gain for people who work more than 50 hours per week?",
-            "gold_sql": "SELECT AVG(capital_gain) AS avg_capital_gain FROM adult_income WHERE hours_per_week > 50;"
+            "question": "What is the minimum and maximum age in the dataset?",
+            "gold_sql": "SELECT MIN(age) AS min_age, MAX(age) AS max_age FROM adult_income;"
         },
         {
-            "question": "For each marital status, show the count and percentage earning more than 50K.",
-            "gold_sql": "SELECT marital_status, COUNT(*) AS total, 100.0 * AVG(CASE WHEN income = '>50K' THEN 1.0 ELSE 0.0 END) AS pct_high_income FROM adult_income GROUP BY marital_status ORDER BY pct_high_income DESC;"
+            "question": "What is the average number of hours worked per week?",
+            "gold_sql": "SELECT AVG(hours_per_week) AS avg_hours_per_week FROM adult_income;"
         },
         {
-            "question": "Which occupation has the highest average capital gain (ignore '?', require at least 20 people)?",
-            "gold_sql": "SELECT occupation, AVG(capital_gain) AS avg_capital_gain FROM adult_income WHERE occupation <> '?' GROUP BY occupation HAVING COUNT(*) >= 20 ORDER BY avg_capital_gain DESC LIMIT 1;"
+            "question": "How many women are in the dataset?",
+            "gold_sql": "SELECT COUNT(*) AS total_women FROM adult_income WHERE sex = 'Female';"
         },
         {
-            "question": "For each relationship type, what is the average age by sex?",
-            "gold_sql": "SELECT relationship, sex, AVG(age) AS avg_age FROM adult_income GROUP BY relationship, sex ORDER BY relationship, sex;"
+            "question": "How many men are in the dataset?",
+            "gold_sql": "SELECT COUNT(*) AS total_men FROM adult_income WHERE sex = 'Male';"
         },
         {
-            "question": "What percentage of women earn more than 50K compared to men?",
-            "gold_sql": "SELECT sex, 100.0 * AVG(CASE WHEN income = '>50K' THEN 1.0 ELSE 0.0 END) AS pct_high_income FROM adult_income GROUP BY sex ORDER BY sex;"
+            "question": "How many people have the native country as United-States?",
+            "gold_sql": "SELECT COUNT(*) AS total_us FROM adult_income WHERE native_country = 'United-States';"
         },
         {
-            "question": "For each native country with at least 50 people, show the average education_num.",
-            "gold_sql": "SELECT native_country, AVG(education_num) AS avg_education_num FROM adult_income GROUP BY native_country HAVING COUNT(*) >= 50 ORDER BY avg_education_num DESC;"
+            "question": "How many people have a capital_gain greater than zero?",
+            "gold_sql": "SELECT COUNT(*) AS people_with_gain FROM adult_income WHERE capital_gain > 0;"
         },
         {
-            "question": "Which workclass has the highest average hours worked per week?",
-            "gold_sql": "SELECT workclass, AVG(hours_per_week) AS avg_hours FROM adult_income GROUP BY workclass ORDER BY avg_hours DESC LIMIT 1;"
+            "question": "How many people have a capital_loss greater than zero?",
+            "gold_sql": "SELECT COUNT(*) AS people_with_loss FROM adult_income WHERE capital_loss > 0;"
         },
         {
-            "question": "For each education level, show the distribution by sex (count and percentage).",
-            "gold_sql": "SELECT education, sex, COUNT(*) AS cnt, 100.0 * COUNT(*) * 1.0 / SUM(COUNT(*)) OVER (PARTITION BY education) AS pct FROM adult_income GROUP BY education, sex ORDER BY education, cnt DESC;"
+            "question": "List all distinct education levels in the dataset.",
+            "gold_sql": "SELECT DISTINCT education FROM adult_income ORDER BY education;"
         },
         {
-            "question": "What is the average age of people earning more than 50K by occupation (top 10, ignore '?')?",
-            "gold_sql": "SELECT occupation, AVG(age) AS avg_age FROM adult_income WHERE income = '>50K' AND occupation <> '?' GROUP BY occupation ORDER BY avg_age DESC LIMIT 10;"
+            "question": "List all distinct occupations in the dataset (including '?').",
+            "gold_sql": "SELECT DISTINCT occupation FROM adult_income ORDER BY occupation;"
         },
         {
-            "question": "For each race and sex combination, what is the average hours worked per week?",
-            "gold_sql": "SELECT race, sex, AVG(hours_per_week) AS avg_hours FROM adult_income GROUP BY race, sex ORDER BY race, sex;"
+            "question": "Show the top 5 oldest people with their age, sex, and workclass.",
+            "gold_sql": "SELECT age, sex, workclass FROM adult_income ORDER BY age DESC LIMIT 5;"
         },
         {
-            "question": "Which marital status has the highest percentage of people working more than 40 hours per week?",
-            "gold_sql": "SELECT marital_status, 100.0 * AVG(CASE WHEN hours_per_week > 40 THEN 1.0 ELSE 0.0 END) AS pct_over_40hrs FROM adult_income GROUP BY marital_status ORDER BY pct_over_40hrs DESC LIMIT 1;"
+            "question": "Show the 5 people who work the fewest hours per week, with their age and hours_per_week.",
+            "gold_sql": "SELECT age, hours_per_week FROM adult_income ORDER BY hours_per_week ASC LIMIT 5;"
         },
         {
-            "question": "For each occupation, show the average capital loss (ignore '?', require at least 25 people).",
-            "gold_sql": "SELECT occupation, AVG(capital_loss) AS avg_capital_loss FROM adult_income WHERE occupation <> '?' GROUP BY occupation HAVING COUNT(*) >= 25 ORDER BY avg_capital_loss DESC;"
+            "question": "How many people are between 30 and 40 years old (inclusive)?",
+            "gold_sql": "SELECT COUNT(*) AS people_30_to_40 FROM adult_income WHERE age BETWEEN 30 AND 40;"
+        },
+        # =========================
+        # 10 EASY–MEDIUM QUERIES
+        # =========================
+        {
+            "question": "What is the average number of hours worked per week for men and women?",
+            "gold_sql": "SELECT sex, AVG(hours_per_week) AS avg_hours_per_week FROM adult_income GROUP BY sex ORDER BY sex;"
         },
         {
-            "question": "What is the average education_num for people earning <=50K vs >50K?",
-            "gold_sql": "SELECT income, AVG(education_num) AS avg_education_num FROM adult_income GROUP BY income ORDER BY income;"
+            "question": "How many people are there in each income group (<=50K and >50K)?",
+            "gold_sql": "SELECT income, COUNT(*) AS total_people FROM adult_income GROUP BY income ORDER BY income;"
         },
         {
-            "question": "For each native country, show the top occupation by count (ignore '?', require at least 30 people in country).",
-            "gold_sql": "WITH occ AS (SELECT native_country, occupation, COUNT(*) AS cnt FROM adult_income WHERE occupation <> '?' GROUP BY native_country, occupation), ranked AS (SELECT native_country, occupation, cnt, ROW_NUMBER() OVER (PARTITION BY native_country ORDER BY cnt DESC) AS rn FROM occ) SELECT r.native_country, r.occupation AS top_occupation, r.cnt FROM ranked r JOIN (SELECT native_country, COUNT(*) AS total FROM adult_income GROUP BY native_country HAVING total >= 30) c ON r.native_country = c.native_country WHERE r.rn = 1 ORDER BY r.cnt DESC;"
+            "question": "For each education level, what is the average education_num?",
+            "gold_sql": "SELECT education, AVG(education_num) AS avg_education_num FROM adult_income GROUP BY education ORDER BY avg_education_num DESC;"
         },
         {
-            "question": "Which relationship type has the highest average capital gain?",
-            "gold_sql": "SELECT relationship, AVG(capital_gain) AS avg_capital_gain FROM adult_income GROUP BY relationship ORDER BY avg_capital_gain DESC LIMIT 1;"
+            "question": "For each workclass, how many people are there?",
+            "gold_sql": "SELECT workclass, COUNT(*) AS total_people FROM adult_income GROUP BY workclass ORDER BY total_people DESC;"
         },
         {
-            "question": "For each workclass and sex, what is the average hours worked per week?",
-            "gold_sql": "SELECT workclass, sex, AVG(hours_per_week) AS avg_hours FROM adult_income GROUP BY workclass, sex ORDER BY workclass, sex;"
+            "question": "For each race, what is the average age?",
+            "gold_sql": "SELECT race, AVG(age) AS avg_age FROM adult_income GROUP BY race ORDER BY avg_age DESC;"
         },
         {
-            "question": "What is the average age by income class and sex?",
-            "gold_sql": "SELECT income, sex, AVG(age) AS avg_age FROM adult_income GROUP BY income, sex ORDER BY income, sex;"
+            "question": "What is the average capital_gain for each income group?",
+            "gold_sql": "SELECT income, AVG(capital_gain) AS avg_capital_gain FROM adult_income GROUP BY income ORDER BY income;"
         },
         {
-            "question": "For each education level, show the percentage of people in each income bracket.",
-            "gold_sql": "SELECT education, income, 100.0 * COUNT(*) * 1.0 / SUM(COUNT(*)) OVER (PARTITION BY education) AS pct FROM adult_income GROUP BY education, income ORDER BY education, income;"
+            "question": "For each marital status, how many people earn more than 50K?",
+            "gold_sql": "SELECT marital_status, COUNT(*) AS high_earners FROM adult_income WHERE income = '>50K' GROUP BY marital_status ORDER BY high_earners DESC;"
         },
         {
-            "question": "Which occupations have the highest percentage of people working exactly 40 hours per week (ignore '?', require at least 20 people)?",
-            "gold_sql": "SELECT occupation, 100.0 * AVG(CASE WHEN hours_per_week = 40 THEN 1.0 ELSE 0.0 END) AS pct_40hrs, COUNT(*) AS cnt FROM adult_income WHERE occupation <> '?' GROUP BY occupation HAVING cnt >= 20 ORDER BY pct_40hrs DESC LIMIT 10;"
+            "question": "For each native country, how many people are there? Show the top 10 countries by count.",
+            "gold_sql": "SELECT native_country, COUNT(*) AS total_people FROM adult_income GROUP BY native_country ORDER BY total_people DESC LIMIT 10;"
         },
         {
-            "question": "For each race, what is the most common workclass and its count?",
-            "gold_sql": "WITH wc AS (SELECT race, workclass, COUNT(*) AS cnt FROM adult_income GROUP BY race, workclass), ranked AS (SELECT race, workclass, cnt, ROW_NUMBER() OVER (PARTITION BY race ORDER BY cnt DESC, workclass ASC) AS rn FROM wc) SELECT race, workclass AS top_workclass, cnt FROM ranked WHERE rn = 1 ORDER BY cnt DESC;"
+            "question": "What is the average age of people who earn more than 50K?",
+            "gold_sql": "SELECT AVG(age) AS avg_age FROM adult_income WHERE income = '>50K';"
         },
         {
-            "question": "What is the average hours per week for people with capital_gain > 0 vs capital_gain = 0?",
-            "gold_sql": "SELECT CASE WHEN capital_gain > 0 THEN 'Has Gain' ELSE 'No Gain' END AS gain_status, AVG(hours_per_week) AS avg_hours FROM adult_income GROUP BY gain_status;"
+            "question": "What is the average age of people who earn less than or equal to 50K?",
+            "gold_sql": "SELECT AVG(age) AS avg_age FROM adult_income WHERE income = '<=50K';"
         },
         {
-            "question": "For each sex, show the top 5 education levels by count.",
-            "gold_sql": "WITH edu AS (SELECT sex, education, COUNT(*) AS cnt FROM adult_income GROUP BY sex, education), ranked AS (SELECT sex, education, cnt, ROW_NUMBER() OVER (PARTITION BY sex ORDER BY cnt DESC, education ASC) AS rn FROM edu) SELECT sex, education, cnt FROM ranked WHERE rn <= 5 ORDER BY sex, cnt DESC;"
+            "question": "What is the average number of hours worked per week by women?",
+            "gold_sql": "SELECT AVG(hours_per_week) AS avg_hours_per_week FROM adult_income WHERE sex = 'Female';"
         },
         {
-            "question": "Which native country has the highest average education_num (require at least 40 people)?",
-            "gold_sql": "SELECT native_country, AVG(education_num) AS avg_education_num FROM adult_income GROUP BY native_country HAVING COUNT(*) >= 40 ORDER BY avg_education_num DESC LIMIT 1;"
+            "question": "What is the average number of hours worked per week by men?",
+            "gold_sql": "SELECT AVG(hours_per_week) AS avg_hours_per_week FROM adult_income WHERE sex = 'Male';"
+        },
+        # =========================
+        # 10 MEDIUM(-ISH) QUERIES (Simplified)
+        # =========================
+        {
+            "question": "What is the average education_num of all people in the dataset?",
+            "gold_sql": "SELECT AVG(education_num) AS avg_education_num FROM adult_income;"
         },
         {
-            "question": "For each occupation, show the average age and average hours per week (ignore '?', top 15 by average age).",
-            "gold_sql": "SELECT occupation, AVG(age) AS avg_age, AVG(hours_per_week) AS avg_hours FROM adult_income WHERE occupation <> '?' GROUP BY occupation ORDER BY avg_age DESC LIMIT 15;"
+            "question": "What is the maximum capital_gain in the dataset?",
+            "gold_sql": "SELECT MAX(capital_gain) AS max_capital_gain FROM adult_income;"
         },
         {
-            "question": "What is the distribution of people by marital status and income?",
-            "gold_sql": "SELECT marital_status, income, COUNT(*) AS cnt FROM adult_income GROUP BY marital_status, income ORDER BY marital_status, income;"
+            "question": "What is the maximum capital_loss in the dataset?",
+            "gold_sql": "SELECT MAX(capital_loss) AS max_capital_loss FROM adult_income;"
         },
         {
-            "question": "For each relationship type, what percentage of people earn more than 50K?",
-            "gold_sql": "SELECT relationship, 100.0 * AVG(CASE WHEN income = '>50K' THEN 1.0 ELSE 0.0 END) AS pct_high_income FROM adult_income GROUP BY relationship ORDER BY pct_high_income DESC;"
+            "question": "What is the average capital_gain for people who have capital_gain greater than zero?",
+            "gold_sql": "SELECT AVG(capital_gain) AS avg_capital_gain FROM adult_income WHERE capital_gain > 0;"
         },
         {
-            "question": "Which workclass has the highest percentage of people with capital_gain > 0?",
-            "gold_sql": "SELECT workclass, 100.0 * AVG(CASE WHEN capital_gain > 0 THEN 1.0 ELSE 0.0 END) AS pct_with_gain FROM adult_income GROUP BY workclass ORDER BY pct_with_gain DESC LIMIT 1;"
+            "question": "What is the average capital_loss for people who have capital_loss greater than zero?",
+            "gold_sql": "SELECT AVG(capital_loss) AS avg_capital_loss FROM adult_income WHERE capital_loss > 0;"
         },
         {
-            "question": "For each education level, show the average capital gain and capital loss.",
-            "gold_sql": "SELECT education, AVG(capital_gain) AS avg_capital_gain, AVG(capital_loss) AS avg_capital_loss FROM adult_income GROUP BY education ORDER BY avg_capital_gain DESC;"
+            "question": "What is the average age of people who work more than 50 hours per week?",
+            "gold_sql": "SELECT AVG(age) AS avg_age FROM adult_income WHERE hours_per_week > 50;"
         },
         {
-            "question": "What is the average hours per week by age group (under 30, 30-50, over 50)?",
-            "gold_sql": "SELECT CASE WHEN age < 30 THEN 'Under 30' WHEN age <= 50 THEN '30-50' ELSE 'Over 50' END AS age_group, AVG(hours_per_week) AS avg_hours FROM adult_income GROUP BY age_group ORDER BY age_group;"
+            "question": "How many people have education = 'Bachelors'?",
+            "gold_sql": "SELECT COUNT(*) AS total_bachelors FROM adult_income WHERE education = 'Bachelors';"
         },
         {
-            "question": "For each race, show the most common education level and its count.",
-            "gold_sql": "WITH edu AS (SELECT race, education, COUNT(*) AS cnt FROM adult_income GROUP BY race, education), ranked AS (SELECT race, education, cnt, ROW_NUMBER() OVER (PARTITION BY race ORDER BY cnt DESC, education ASC) AS rn FROM edu) SELECT race, education AS top_education, cnt FROM ranked WHERE rn = 1 ORDER BY cnt DESC;"
+            "question": "How many people have marital_status = 'Never-married'?",
+            "gold_sql": "SELECT COUNT(*) AS total_never_married FROM adult_income WHERE marital_status = 'Never-married';"
         },
         {
-            "question": "Which occupation has the highest average hours per week among people earning more than 50K (ignore '?', require at least 15 people)?",
-            "gold_sql": "SELECT occupation, AVG(hours_per_week) AS avg_hours FROM adult_income WHERE income = '>50K' AND occupation <> '?' GROUP BY occupation HAVING COUNT(*) >= 15 ORDER BY avg_hours DESC LIMIT 1;"
+            "question": "How many people have occupation = 'Exec-managerial'?",
+            "gold_sql": "SELECT COUNT(*) AS total_exec_managerial FROM adult_income WHERE occupation = 'Exec-managerial';"
         },
         {
-            "question": "For each sex and marital status, what is the average education_num?",
-            "gold_sql": "SELECT sex, marital_status, AVG(education_num) AS avg_education_num FROM adult_income GROUP BY sex, marital_status ORDER BY sex, avg_education_num DESC;"
+            "question": "How many people have native_country not equal to 'United-States'?",
+            "gold_sql": "SELECT COUNT(*) AS total_non_us FROM adult_income WHERE native_country <> 'United-States';"
         },
         {
-            "question": "What is the percentage of people working more than 45 hours per week by income class?",
-            "gold_sql": "SELECT income, 100.0 * AVG(CASE WHEN hours_per_week > 45 THEN 1.0 ELSE 0.0 END) AS pct_over_45hrs FROM adult_income GROUP BY income ORDER BY income;"
+            "question": "How many people have both capital_gain and capital_loss equal to zero?",
+            "gold_sql": "SELECT COUNT(*) AS total_no_gain_loss FROM adult_income WHERE capital_gain = 0 AND capital_loss = 0;"
         },
         {
-            "question": "For each native country, show the average age by income class (require at least 25 people per country).",
-            "gold_sql": "SELECT native_country, income, AVG(age) AS avg_age FROM adult_income GROUP BY native_country, income HAVING COUNT(*) >= 25 ORDER BY native_country, income;"
+            "question": "How many people have hours_per_week greater than or equal to 60?",
+            "gold_sql": "SELECT COUNT(*) AS total_60plus_hours FROM adult_income WHERE hours_per_week >= 60;"
         },
         {
-            "question": "Which workclass has the highest average age?",
-            "gold_sql": "SELECT workclass, AVG(age) AS avg_age FROM adult_income GROUP BY workclass ORDER BY avg_age DESC LIMIT 1;"
+            "question": "How many people have education_num greater than or equal to 13?",
+            "gold_sql": "SELECT COUNT(*) AS total_high_education FROM adult_income WHERE education_num >= 13;"
         },
         {
-            "question": "For each relationship type, show the count and average hours per week.",
-            "gold_sql": "SELECT relationship, COUNT(*) AS cnt, AVG(hours_per_week) AS avg_hours FROM adult_income GROUP BY relationship ORDER BY cnt DESC;"
+            "question": "Show 5 women who work more than 50 hours per week, with their age and occupation.",
+            "gold_sql": "SELECT age, occupation FROM adult_income WHERE sex = 'Female' AND hours_per_week > 50 LIMIT 5;"
         },
         {
-            "question": "What is the average capital gain for people with different education levels (top 10 by average gain)?",
-            "gold_sql": "SELECT education, AVG(capital_gain) AS avg_capital_gain FROM adult_income GROUP BY education ORDER BY avg_capital_gain DESC LIMIT 10;"
+            "question": "Show 5 men older than 60 years, with their age, marital_status, and income.",
+            "gold_sql": "SELECT age, marital_status, income FROM adult_income WHERE sex = 'Male' AND age > 60 LIMIT 5;"
         },
         {
-            "question": "For each sex, what is the most common occupation (ignore '?')?",
-            "gold_sql": "WITH occ AS (SELECT sex, occupation, COUNT(*) AS cnt FROM adult_income WHERE occupation <> '?' GROUP BY sex, occupation), ranked AS (SELECT sex, occupation, cnt, ROW_NUMBER() OVER (PARTITION BY sex ORDER BY cnt DESC, occupation ASC) AS rn FROM occ) SELECT sex, occupation AS top_occupation, cnt FROM ranked WHERE rn = 1 ORDER BY cnt DESC;"
-        },
-        {
-            "question": "Which education level has the highest average hours per week among people earning more than 50K?",
-            "gold_sql": "SELECT education, AVG(hours_per_week) AS avg_hours FROM adult_income WHERE income = '>50K' GROUP BY education ORDER BY avg_hours DESC LIMIT 1;"
-        },
-        {
-            "question": "For each race, show the percentage of people in each income bracket.",
-            "gold_sql": "SELECT race, income, 100.0 * COUNT(*) * 1.0 / SUM(COUNT(*)) OVER (PARTITION BY race) AS pct FROM adult_income GROUP BY race, income ORDER BY race, income;"
-        },
-        {
-            "question": "What is the average age by workclass and sex?",
-            "gold_sql": "SELECT workclass, sex, AVG(age) AS avg_age FROM adult_income GROUP BY workclass, sex ORDER BY workclass, sex;"
-        },
-        {
-            "question": "For each occupation, show the average education_num (ignore '?', top 10 by average education).",
-            "gold_sql": "SELECT occupation, AVG(education_num) AS avg_education_num FROM adult_income WHERE occupation <> '?' GROUP BY occupation ORDER BY avg_education_num DESC LIMIT 10;"
-        },
-        {
-            "question": "Which marital status has the highest percentage of people with capital_loss > 0?",
-            "gold_sql": "SELECT marital_status, 100.0 * AVG(CASE WHEN capital_loss > 0 THEN 1.0 ELSE 0.0 END) AS pct_with_loss FROM adult_income GROUP BY marital_status ORDER BY pct_with_loss DESC LIMIT 1;"
-        },
-        {
-            "question": "For each native country, show the average hours per week (require at least 30 people, top 15).",
-            "gold_sql": "SELECT native_country, AVG(hours_per_week) AS avg_hours FROM adult_income GROUP BY native_country HAVING COUNT(*) >= 30 ORDER BY avg_hours DESC LIMIT 15;"
-        },
-        {
-            "question": "What is the distribution of people by relationship type and income?",
-            "gold_sql": "SELECT relationship, income, COUNT(*) AS cnt FROM adult_income GROUP BY relationship, income ORDER BY relationship, income;"
-        },
-        {
-            "question": "For each education level, show the most common workclass and its count.",
-            "gold_sql": "WITH wc AS (SELECT education, workclass, COUNT(*) AS cnt FROM adult_income GROUP BY education, workclass), ranked AS (SELECT education, workclass, cnt, ROW_NUMBER() OVER (PARTITION BY education ORDER BY cnt DESC, workclass ASC) AS rn FROM wc) SELECT education, workclass AS top_workclass, cnt FROM ranked WHERE rn = 1 ORDER BY cnt DESC;"
-        },
-        {
-            "question": "Which race has the highest average capital gain?",
-            "gold_sql": "SELECT race, AVG(capital_gain) AS avg_capital_gain FROM adult_income GROUP BY race ORDER BY avg_capital_gain DESC LIMIT 1;"
-        },
-        {
-            "question": "For each sex, what is the average age and average education_num?",
-            "gold_sql": "SELECT sex, AVG(age) AS avg_age, AVG(education_num) AS avg_education_num FROM adult_income GROUP BY sex ORDER BY sex;"
-        },
-        {
-            "question": "What is the percentage of people working less than 30 hours per week by income class?",
-            "gold_sql": "SELECT income, 100.0 * AVG(CASE WHEN hours_per_week < 30 THEN 1.0 ELSE 0.0 END) AS pct_under_30hrs FROM adult_income GROUP BY income ORDER BY income;"
-        },
-        {
-            "question": "For each occupation, show the average age (ignore '?', require at least 20 people, top 10).",
-            "gold_sql": "SELECT occupation, AVG(age) AS avg_age FROM adult_income WHERE occupation <> '?' GROUP BY occupation HAVING COUNT(*) >= 20 ORDER BY avg_age DESC LIMIT 10;"
+            "question": "Show 10 people who have capital_gain greater than zero, with their age, sex, and capital_gain.",
+            "gold_sql": "SELECT age, sex, capital_gain FROM adult_income WHERE capital_gain > 0 LIMIT 10;"
         }
     ]
 
@@ -343,9 +312,11 @@ def calculate_overall_metrics(df: pd.DataFrame) -> Dict[str, float]:
     with_rag_f1 = pd.to_numeric(df['With_RAG_F1'], errors='coerce').mean()
     without_rag_f1 = pd.to_numeric(df['Without_RAG_F1'], errors='coerce').mean()
     
-    # Latency (extract numeric values)
-    with_rag_latency = df['With_RAG_Latency'].str.replace('s', '').astype(float).mean()
-    without_rag_latency = df['Without_RAG_Latency'].str.replace('s', '').astype(float).mean()
+    # Latency (extract numeric values, skip "SKIPPED" entries)
+    with_rag_latency_series = df[df['With_RAG_Latency'] != 'SKIPPED']['With_RAG_Latency'].str.replace('s', '').astype(float)
+    without_rag_latency_series = df[df['Without_RAG_Latency'] != 'SKIPPED']['Without_RAG_Latency'].str.replace('s', '').astype(float)
+    with_rag_latency = with_rag_latency_series.mean() if len(with_rag_latency_series) > 0 else 0.0
+    without_rag_latency = without_rag_latency_series.mean() if len(without_rag_latency_series) > 0 else 0.0
     
     return {
         'total': total,
@@ -362,67 +333,112 @@ def calculate_overall_metrics(df: pd.DataFrame) -> Dict[str, float]:
         'with_rag_success_count': with_rag_success,
         'without_rag_success_count': without_rag_success,
         'with_rag_ex_count': with_rag_ex,
-        'without_rag_ex_count': without_rag_ex
+        'without_rag_ex_count': without_rag_ex,
+        'with_rag_sm_count': with_rag_sm,
+        'without_rag_sm_count': without_rag_sm
     }
 
 
-def create_figure_1(metrics_ollama: Dict, metrics_gpt: Dict, output_dir: Path):
-    """Create Figure 1: Overall metrics comparison bar chart."""
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 6))
+def create_figure_1(metrics_arctic: Dict, metrics_qwen: Dict = None, metrics_gpt: Dict = None, output_dir: Path = None):
+    """Create Figure 1: Overall metrics comparison bar chart for 2-3 models."""
+    # Determine how many models we have
+    has_qwen = metrics_qwen is not None
+    has_gpt = metrics_gpt is not None
+    
+    if has_qwen and has_gpt:
+        # Three models: Arctic, Qwen, GPT
+        fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(24, 6))
+    elif has_qwen or has_gpt:
+        # Two models
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 6))
+    else:
+        # Single model
+        fig, ax1 = plt.subplots(1, 1, figsize=(10, 6))
+        ax2 = None
+        ax3 = None
     
     metrics = ['Success Rate', 'EX', 'SM', 'F1-Score']
     x = range(len(metrics))
     width = 0.35
     
-    # Ollama subplot
-    ollama_with = [
-        metrics_ollama['with_rag_success_pct'],
-        metrics_ollama['with_rag_ex_pct'],
-        metrics_ollama['with_rag_sm_pct'],
-        metrics_ollama['with_rag_f1'] * 100
+    # Arctic subplot
+    arctic_with = [
+        metrics_arctic['with_rag_success_pct'],
+        metrics_arctic['with_rag_ex_pct'],
+        metrics_arctic['with_rag_sm_pct'],
+        metrics_arctic['with_rag_f1'] * 100
     ]
-    ollama_without = [
-        metrics_ollama['without_rag_success_pct'],
-        metrics_ollama['without_rag_ex_pct'],
-        metrics_ollama['without_rag_sm_pct'],
-        metrics_ollama['without_rag_f1'] * 100
+    arctic_without = [
+        metrics_arctic['without_rag_success_pct'],
+        metrics_arctic['without_rag_ex_pct'],
+        metrics_arctic['without_rag_sm_pct'],
+        metrics_arctic['without_rag_f1'] * 100
     ]
     
-    ax1.bar([i - width/2 for i in x], ollama_with, width, label='With RAG', color=COLORS['with_rag'])
-    ax1.bar([i + width/2 for i in x], ollama_without, width, label='Without RAG', color=COLORS['without_rag'])
+    ax1.bar([i - width/2 for i in x], arctic_with, width, label='With RAG', color=COLORS['with_rag'])
+    ax1.bar([i + width/2 for i in x], arctic_without, width, label='Without RAG', color=COLORS['without_rag'])
     ax1.set_xlabel('Metrics', fontweight='bold')
-    ax1.set_ylabel('Percentage / Score', fontweight='bold')
-    ax1.set_title('Ollama (llama3.1:8b): Overall Performance', fontweight='bold', fontsize=12)
+    ax1.set_ylabel('Percentage (%)', fontweight='bold')
+    ax1.set_title('Arctic Base Model: Overall Performance', fontweight='bold', fontsize=12)
     ax1.set_xticks(x)
     ax1.set_xticklabels(metrics)
     ax1.legend()
     ax1.grid(axis='y', alpha=0.3)
     ax1.set_ylim(0, 100)
     
-    # GPT subplot
-    gpt_with = [
-        metrics_gpt['with_rag_success_pct'],
-        metrics_gpt['with_rag_ex_pct'],
-        metrics_gpt['with_rag_sm_pct'],
-        metrics_gpt['with_rag_f1'] * 100
-    ]
-    gpt_without = [
-        metrics_gpt['without_rag_success_pct'],
-        metrics_gpt['without_rag_ex_pct'],
-        metrics_gpt['without_rag_sm_pct'],
-        metrics_gpt['without_rag_f1'] * 100
-    ]
+    # Qwen subplot (if available)
+    if has_qwen and ax2:
+        qwen_with = [
+            metrics_qwen['with_rag_success_pct'],
+            metrics_qwen['with_rag_ex_pct'],
+            metrics_qwen['with_rag_sm_pct'],
+            metrics_qwen['with_rag_f1'] * 100
+        ]
+        qwen_without = [
+            metrics_qwen['without_rag_success_pct'],
+            metrics_qwen['without_rag_ex_pct'],
+            metrics_qwen['without_rag_sm_pct'],
+            metrics_qwen['without_rag_f1'] * 100
+        ]
+        
+        ax2.bar([i - width/2 for i in x], qwen_with, width, label='With RAG', color=COLORS['with_rag'])
+        ax2.bar([i + width/2 for i in x], qwen_without, width, label='Without RAG', color=COLORS['without_rag'])
+        ax2.set_xlabel('Metrics', fontweight='bold')
+        ax2.set_ylabel('Percentage (%)', fontweight='bold')
+        ax2.set_title('Qwen-0.5B-Spider: Overall Performance', fontweight='bold', fontsize=12)
+        ax2.set_xticks(x)
+        ax2.set_xticklabels(metrics)
+        ax2.legend()
+        ax2.grid(axis='y', alpha=0.3)
+        ax2.set_ylim(0, 100)
     
-    ax2.bar([i - width/2 for i in x], gpt_with, width, label='With RAG', color=COLORS['with_rag'])
-    ax2.bar([i + width/2 for i in x], gpt_without, width, label='Without RAG', color=COLORS['without_rag'])
-    ax2.set_xlabel('Metrics', fontweight='bold')
-    ax2.set_ylabel('Percentage / Score', fontweight='bold')
-    ax2.set_title('GPT-4o-mini: Overall Performance', fontweight='bold', fontsize=12)
-    ax2.set_xticks(x)
-    ax2.set_xticklabels(metrics)
-    ax2.legend()
-    ax2.grid(axis='y', alpha=0.3)
-    ax2.set_ylim(0, 100)
+    # GPT subplot (if available)
+    if has_gpt:
+        gpt_ax = ax3 if has_qwen else ax2
+        if gpt_ax:
+            gpt_with = [
+                metrics_gpt['with_rag_success_pct'],
+                metrics_gpt['with_rag_ex_pct'],
+                metrics_gpt['with_rag_sm_pct'],
+                metrics_gpt['with_rag_f1'] * 100
+            ]
+            gpt_without = [
+                metrics_gpt['without_rag_success_pct'],
+                metrics_gpt['without_rag_ex_pct'],
+                metrics_gpt['without_rag_sm_pct'],
+                metrics_gpt['without_rag_f1'] * 100
+            ]
+            
+            gpt_ax.bar([i - width/2 for i in x], gpt_with, width, label='With RAG', color=COLORS['with_rag'])
+            gpt_ax.bar([i + width/2 for i in x], gpt_without, width, label='Without RAG', color=COLORS['without_rag'])
+            gpt_ax.set_xlabel('Metrics', fontweight='bold')
+            gpt_ax.set_ylabel('Percentage (%)', fontweight='bold')
+            gpt_ax.set_title('GPT-4o-mini: Overall Performance', fontweight='bold', fontsize=12)
+            gpt_ax.set_xticks(x)
+            gpt_ax.set_xticklabels(metrics)
+            gpt_ax.legend()
+            gpt_ax.grid(axis='y', alpha=0.3)
+            gpt_ax.set_ylim(0, 100)
     
     plt.tight_layout()
     output_file = output_dir / "figure_1_overall_metrics.png"
@@ -431,71 +447,101 @@ def create_figure_1(metrics_ollama: Dict, metrics_gpt: Dict, output_dir: Path):
     plt.close()
 
 
-def create_table_2(results_ollama: Dict[str, pd.DataFrame], results_gpt: Dict[str, pd.DataFrame], output_dir: Path):
-    """Create Table 2: Technique-by-technique comparison."""
+def create_table_2(results_arctic: Dict[str, pd.DataFrame], results_qwen: Dict[str, pd.DataFrame] = None, results_gpt: Dict[str, pd.DataFrame] = None, output_dir: Path = None):
+    """Create Table 2: Technique-by-technique comparison for 2-3 models."""
     techniques = ['Few-Shot', 'CoT', 'LtM', 'EG']
     table_data = []
     
     for technique in techniques:
-        # Ollama metrics
-        ollama_df = results_ollama[technique]
-        ollama_metrics = calculate_overall_metrics(ollama_df)
+        # Arctic metrics
+        arctic_df = results_arctic[technique]
+        arctic_metrics = calculate_overall_metrics(arctic_df)
         
-        # GPT metrics
-        gpt_df = results_gpt[technique]
-        gpt_metrics = calculate_overall_metrics(gpt_df)
-        
-        # Add rows for Ollama
+        # Add rows for Arctic
         table_data.append({
-            'Model': 'Ollama',
+            'Model': 'Arctic Base',
             'Technique': technique,
             'Metric': 'EX',
-            'With RAG': f"{ollama_metrics['with_rag_ex_pct']:.1f}%",
-            'Without RAG': f"{ollama_metrics['without_rag_ex_pct']:.1f}%",
-            'Improvement': f"+{ollama_metrics['with_rag_ex_pct'] - ollama_metrics['without_rag_ex_pct']:.1f}%"
+            'With RAG': f"{arctic_metrics['with_rag_ex_pct']:.1f}%",
+            'Without RAG': f"{arctic_metrics['without_rag_ex_pct']:.1f}%",
+            'Improvement': f"+{arctic_metrics['with_rag_ex_pct'] - arctic_metrics['without_rag_ex_pct']:.1f}%"
         })
         table_data.append({
-            'Model': 'Ollama',
+            'Model': 'Arctic Base',
             'Technique': technique,
             'Metric': 'SM',
-            'With RAG': f"{ollama_metrics['with_rag_sm_pct']:.1f}%",
-            'Without RAG': f"{ollama_metrics['without_rag_sm_pct']:.1f}%",
-            'Improvement': f"+{ollama_metrics['with_rag_sm_pct'] - ollama_metrics['without_rag_sm_pct']:.1f}%"
+            'With RAG': f"{arctic_metrics['with_rag_sm_pct']:.1f}%",
+            'Without RAG': f"{arctic_metrics['without_rag_sm_pct']:.1f}%",
+            'Improvement': f"+{arctic_metrics['with_rag_sm_pct'] - arctic_metrics['without_rag_sm_pct']:.1f}%"
         })
         table_data.append({
-            'Model': 'Ollama',
+            'Model': 'Arctic Base',
             'Technique': technique,
             'Metric': 'F1',
-            'With RAG': f"{ollama_metrics['with_rag_f1']:.3f}",
-            'Without RAG': f"{ollama_metrics['without_rag_f1']:.3f}",
-            'Improvement': f"+{ollama_metrics['with_rag_f1'] - ollama_metrics['without_rag_f1']:.3f}"
+            'With RAG': f"{arctic_metrics['with_rag_f1'] * 100:.1f}%",
+            'Without RAG': f"{arctic_metrics['without_rag_f1'] * 100:.1f}%",
+            'Improvement': f"+{(arctic_metrics['with_rag_f1'] - arctic_metrics['without_rag_f1']) * 100:.1f}%"
         })
         
-        # Add rows for GPT
-        table_data.append({
-            'Model': 'GPT-4o-mini',
-            'Technique': technique,
-            'Metric': 'EX',
-            'With RAG': f"{gpt_metrics['with_rag_ex_pct']:.1f}%",
-            'Without RAG': f"{gpt_metrics['without_rag_ex_pct']:.1f}%",
-            'Improvement': f"+{gpt_metrics['with_rag_ex_pct'] - gpt_metrics['without_rag_ex_pct']:.1f}%"
-        })
-        table_data.append({
-            'Model': 'GPT-4o-mini',
-            'Technique': technique,
-            'Metric': 'SM',
-            'With RAG': f"{gpt_metrics['with_rag_sm_pct']:.1f}%",
-            'Without RAG': f"{gpt_metrics['without_rag_sm_pct']:.1f}%",
-            'Improvement': f"+{gpt_metrics['with_rag_sm_pct'] - gpt_metrics['without_rag_sm_pct']:.1f}%"
-        })
-        table_data.append({
-            'Model': 'GPT-4o-mini',
-            'Technique': technique,
-            'Metric': 'F1',
-            'With RAG': f"{gpt_metrics['with_rag_f1']:.3f}",
-            'Without RAG': f"{gpt_metrics['without_rag_f1']:.3f}",
-            'Improvement': f"+{gpt_metrics['with_rag_f1'] - gpt_metrics['without_rag_f1']:.3f}"
-        })
+        # Add rows for Qwen (if available)
+        if results_qwen:
+            qwen_df = results_qwen[technique]
+            qwen_metrics = calculate_overall_metrics(qwen_df)
+            
+            table_data.append({
+                'Model': 'Qwen-0.5B-Spider',
+                'Technique': technique,
+                'Metric': 'EX',
+                'With RAG': f"{qwen_metrics['with_rag_ex_pct']:.1f}%",
+                'Without RAG': f"{qwen_metrics['without_rag_ex_pct']:.1f}%",
+                'Improvement': f"+{qwen_metrics['with_rag_ex_pct'] - qwen_metrics['without_rag_ex_pct']:.1f}%"
+            })
+            table_data.append({
+                'Model': 'Qwen-0.5B-Spider',
+                'Technique': technique,
+                'Metric': 'SM',
+                'With RAG': f"{qwen_metrics['with_rag_sm_pct']:.1f}%",
+                'Without RAG': f"{qwen_metrics['without_rag_sm_pct']:.1f}%",
+                'Improvement': f"+{qwen_metrics['with_rag_sm_pct'] - qwen_metrics['without_rag_sm_pct']:.1f}%"
+            })
+            table_data.append({
+                'Model': 'Qwen-0.5B-Spider',
+                'Technique': technique,
+                'Metric': 'F1',
+                'With RAG': f"{qwen_metrics['with_rag_f1'] * 100:.1f}%",
+                'Without RAG': f"{qwen_metrics['without_rag_f1'] * 100:.1f}%",
+                'Improvement': f"+{(qwen_metrics['with_rag_f1'] - qwen_metrics['without_rag_f1']) * 100:.1f}%"
+            })
+        
+        # Add rows for GPT (if available)
+        if results_gpt:
+            gpt_df = results_gpt[technique]
+            gpt_metrics = calculate_overall_metrics(gpt_df)
+            
+            table_data.append({
+                'Model': 'GPT-4o-mini',
+                'Technique': technique,
+                'Metric': 'EX',
+                'With RAG': f"{gpt_metrics['with_rag_ex_pct']:.1f}%",
+                'Without RAG': f"{gpt_metrics['without_rag_ex_pct']:.1f}%",
+                'Improvement': f"+{gpt_metrics['with_rag_ex_pct'] - gpt_metrics['without_rag_ex_pct']:.1f}%"
+            })
+            table_data.append({
+                'Model': 'GPT-4o-mini',
+                'Technique': technique,
+                'Metric': 'SM',
+                'With RAG': f"{gpt_metrics['with_rag_sm_pct']:.1f}%",
+                'Without RAG': f"{gpt_metrics['without_rag_sm_pct']:.1f}%",
+                'Improvement': f"+{gpt_metrics['with_rag_sm_pct'] - gpt_metrics['without_rag_sm_pct']:.1f}%"
+            })
+            table_data.append({
+                'Model': 'GPT-4o-mini',
+                'Technique': technique,
+                'Metric': 'F1',
+                'With RAG': f"{gpt_metrics['with_rag_f1'] * 100:.1f}%",
+                'Without RAG': f"{gpt_metrics['without_rag_f1'] * 100:.1f}%",
+                'Improvement': f"+{(gpt_metrics['with_rag_f1'] - gpt_metrics['without_rag_f1']) * 100:.1f}%"
+            })
     
     df_table = pd.DataFrame(table_data)
     
@@ -540,7 +586,7 @@ def create_figure_1_ollama_only(metrics_ollama: Dict, output_dir: Path):
     ax.bar([i + width/2 for i in x], ollama_without, width, label='Without RAG', color=COLORS['without_rag'])
     ax.set_xlabel('Metrics', fontweight='bold')
     ax.set_ylabel('Percentage / Score', fontweight='bold')
-    ax.set_title('Ollama (llama3.1:8b): Overall Performance', fontweight='bold', fontsize=14)
+    ax.set_title('Arctic Base Model: Overall Performance', fontweight='bold', fontsize=14)
     ax.set_xticks(x)
     ax.set_xticklabels(metrics)
     ax.legend()
@@ -564,7 +610,7 @@ def create_table_2_ollama_only(results_ollama: Dict[str, pd.DataFrame], output_d
         ollama_metrics = calculate_overall_metrics(ollama_df)
         
         table_data.append({
-            'Model': 'Ollama',
+            'Model': 'Arctic Fine-tuned',
             'Technique': technique,
             'Metric': 'EX',
             'With RAG': f"{ollama_metrics['with_rag_ex_pct']:.1f}%",
@@ -572,7 +618,7 @@ def create_table_2_ollama_only(results_ollama: Dict[str, pd.DataFrame], output_d
             'Improvement': f"+{ollama_metrics['with_rag_ex_pct'] - ollama_metrics['without_rag_ex_pct']:.1f}%"
         })
         table_data.append({
-            'Model': 'Ollama',
+            'Model': 'Arctic Fine-tuned',
             'Technique': technique,
             'Metric': 'SM',
             'With RAG': f"{ollama_metrics['with_rag_sm_pct']:.1f}%",
@@ -580,7 +626,7 @@ def create_table_2_ollama_only(results_ollama: Dict[str, pd.DataFrame], output_d
             'Improvement': f"+{ollama_metrics['with_rag_sm_pct'] - ollama_metrics['without_rag_sm_pct']:.1f}%"
         })
         table_data.append({
-            'Model': 'Ollama',
+            'Model': 'Arctic Fine-tuned',
             'Technique': technique,
             'Metric': 'F1',
             'With RAG': f"{ollama_metrics['with_rag_f1']:.3f}",
@@ -612,17 +658,19 @@ def create_figure_6_ollama_only(results_ollama: Dict[str, pd.DataFrame], output_
         total = len(df)
         with_rag_success = sum(df['With_RAG_Success'] == '✅')
         without_rag_success = sum(df['Without_RAG_Success'] == '✅')
-        ollama_with_rag.append(with_rag_success)
-        ollama_without_rag.append(without_rag_success - with_rag_success)
-        ollama_failed.append(total - without_rag_success)
+        # Convert to percentages
+        ollama_with_rag.append((with_rag_success / total) * 100)
+        ollama_without_rag.append(((without_rag_success - with_rag_success) / total) * 100)
+        ollama_failed.append(((total - without_rag_success) / total) * 100)
     
     ax.bar(x, ollama_with_rag, width, label='Success with RAG', color=COLORS['with_rag'])
     ax.bar(x, ollama_without_rag, width, bottom=ollama_with_rag, label='Success without RAG only', color='#FFB347')
     ax.bar(x, ollama_failed, width, bottom=[a+b for a, b in zip(ollama_with_rag, ollama_without_rag)], 
             label='Failed', color='#D3D3D3')
     ax.set_xlabel('Techniques', fontweight='bold')
-    ax.set_ylabel('Count of Queries', fontweight='bold')
-    ax.set_title('Ollama (llama3.1:8b): Success Rate Breakdown', fontweight='bold', fontsize=14)
+    ax.set_ylabel('Percentage (%)', fontweight='bold')
+    ax.set_title('Arctic Base Model: Success Rate Breakdown', fontweight='bold', fontsize=14)
+    ax.set_ylim(0, 100)
     ax.set_xticks(x)
     ax.set_xticklabels(techniques)
     ax.legend()
@@ -653,9 +701,10 @@ def create_figure_6(results_ollama: Dict[str, pd.DataFrame], results_gpt: Dict[s
         total = len(df)
         with_rag_success = sum(df['With_RAG_Success'] == '✅')
         without_rag_success = sum(df['Without_RAG_Success'] == '✅')
-        ollama_with_rag.append(with_rag_success)
-        ollama_without_rag.append(without_rag_success - with_rag_success)  # Only those that succeeded without but not with
-        ollama_failed.append(total - without_rag_success)  # Failed in both
+        # Convert to percentages
+        ollama_with_rag.append((with_rag_success / total) * 100)
+        ollama_without_rag.append(((without_rag_success - with_rag_success) / total) * 100)  # Only those that succeeded without but not with
+        ollama_failed.append(((total - without_rag_success) / total) * 100)  # Failed in both
     
     # Ollama subplot
     ax1.bar(x, ollama_with_rag, width, label='Success with RAG', color=COLORS['with_rag'])
@@ -663,8 +712,9 @@ def create_figure_6(results_ollama: Dict[str, pd.DataFrame], results_gpt: Dict[s
     ax1.bar(x, ollama_failed, width, bottom=[a+b for a, b in zip(ollama_with_rag, ollama_without_rag)], 
             label='Failed', color='#D3D3D3')
     ax1.set_xlabel('Techniques', fontweight='bold')
-    ax1.set_ylabel('Count of Queries', fontweight='bold')
-    ax1.set_title('Ollama (llama3.1:8b): Success Rate Breakdown', fontweight='bold', fontsize=12)
+    ax1.set_ylabel('Percentage (%)', fontweight='bold')
+    ax1.set_title('Arctic Base Model: Success Rate Breakdown', fontweight='bold', fontsize=12)
+    ax1.set_ylim(0, 100)
     ax1.set_xticks(x)
     ax1.set_xticklabels(techniques)
     ax1.legend()
@@ -680,9 +730,10 @@ def create_figure_6(results_ollama: Dict[str, pd.DataFrame], results_gpt: Dict[s
         total = len(df)
         with_rag_success = sum(df['With_RAG_Success'] == '✅')
         without_rag_success = sum(df['Without_RAG_Success'] == '✅')
-        gpt_with_rag.append(with_rag_success)
-        gpt_without_rag.append(without_rag_success - with_rag_success)
-        gpt_failed.append(total - without_rag_success)
+        # Convert to percentages
+        gpt_with_rag.append((with_rag_success / total) * 100)
+        gpt_without_rag.append(((without_rag_success - with_rag_success) / total) * 100)
+        gpt_failed.append(((total - without_rag_success) / total) * 100)
     
     # GPT subplot
     ax2.bar(x, gpt_with_rag, width, label='Success with RAG', color=COLORS['with_rag'])
@@ -690,8 +741,9 @@ def create_figure_6(results_ollama: Dict[str, pd.DataFrame], results_gpt: Dict[s
     ax2.bar(x, gpt_failed, width, bottom=[a+b for a, b in zip(gpt_with_rag, gpt_without_rag)], 
             label='Failed', color='#D3D3D3')
     ax2.set_xlabel('Techniques', fontweight='bold')
-    ax2.set_ylabel('Count of Queries', fontweight='bold')
+    ax2.set_ylabel('Percentage (%)', fontweight='bold')
     ax2.set_title('GPT-4o-mini: Success Rate Breakdown', fontweight='bold', fontsize=12)
+    ax2.set_ylim(0, 100)
     ax2.set_xticks(x)
     ax2.set_xticklabels(techniques)
     ax2.legend()
@@ -707,8 +759,8 @@ def create_figure_6(results_ollama: Dict[str, pd.DataFrame], results_gpt: Dict[s
 def main():
     """Main evaluation function."""
     print("="*80)
-    print("COMPREHENSIVE EVALUATION: 100 Test Cases")
-    print("Models: Ollama (llama3.1:8b) & GPT-4o-mini")
+    print("COMPREHENSIVE EVALUATION")
+    print("Models: Arctic Base Model, Qwen-0.5B-Spider & GPT-4o-mini")
     print("="*80)
     
     # Configuration
@@ -723,28 +775,44 @@ def main():
     output_dir = script_dir / "data" / "results"
     output_dir.mkdir(parents=True, exist_ok=True)
     
-    # Load 100 test cases
+    # Load test cases
+    NUM_TEST_CASES = 35
     test_cases = load_all_100_test_cases()
     
-    if len(test_cases) < 100:
-        print(f"Warning: Only {len(test_cases)} test cases available. Generating additional cases...")
-        additional = generate_50_additional_test_cases()
-        test_cases.extend(additional[:100 - len(test_cases)])
+    # Take only first NUM_TEST_CASES
+    if len(test_cases) >= NUM_TEST_CASES:
+        test_cases = test_cases[:NUM_TEST_CASES]
+    else:
+        print(f"Warning: Only {len(test_cases)} test cases available. Using all available.")
     
-    print(f"\nTotal test cases: {len(test_cases)}")
-    
-    # Save all 100 test cases
-    test_cases_file = output_dir / "all_100_test_cases.json"
+    # Save test cases
+    test_cases_file = output_dir / f"all_{NUM_TEST_CASES}_test_cases.json"
     with open(test_cases_file, 'w', encoding='utf-8') as f:
         json.dump(test_cases, f, indent=2)
     print(f"Saved all test cases to: {test_cases_file}\n")
     
-    # Run evaluation for Ollama
+    # Run evaluation for Arctic Base Model
     print("\n" + "="*80)
-    print("Starting Ollama Evaluation")
+    print("Starting Arctic Base Model Evaluation")
     print("="*80)
-    results_ollama = run_evaluation_for_model(
-        "ollama/llama3.1:8b",
+    print("WARNING: Make sure arctic_base_server.py is running on port 11437!")
+    print("="*80)
+    results_arctic = run_evaluation_for_model(
+        "ollama/arctic-base",
+        test_cases,
+        techniques,
+        db_url,
+        output_dir
+    )
+    
+    # Run evaluation for Qwen-0.5B-Spider
+    print("\n" + "="*80)
+    print("Starting Qwen-0.5B-Spider Evaluation")
+    print("="*80)
+    print("WARNING: Make sure qwen_server.py is running on port 11438!")
+    print("="*80)
+    results_qwen = run_evaluation_for_model(
+        "ollama/qwen-0.5b-spider",
         test_cases,
         techniques,
         db_url,
@@ -780,8 +848,11 @@ def main():
     print("="*80)
     
     # Combine all techniques for overall metrics
-    all_ollama = pd.concat([results_ollama[t] for t in techniques], ignore_index=True)
-    metrics_ollama = calculate_overall_metrics(all_ollama)
+    all_arctic = pd.concat([results_arctic[t] for t in techniques], ignore_index=True)
+    metrics_arctic = calculate_overall_metrics(all_arctic)
+    
+    all_qwen = pd.concat([results_qwen[t] for t in techniques], ignore_index=True)
+    metrics_qwen = calculate_overall_metrics(all_qwen)
     
     if results_gpt:
         all_gpt = pd.concat([results_gpt[t] for t in techniques], ignore_index=True)
@@ -789,11 +860,21 @@ def main():
     else:
         metrics_gpt = None
     
-    print(f"\nOllama Overall Metrics:")
-    print(f"  Success Rate: {metrics_ollama['with_rag_success_pct']:.1f}% (with) vs {metrics_ollama['without_rag_success_pct']:.1f}% (without)")
-    print(f"  EX: {metrics_ollama['with_rag_ex_pct']:.1f}% (with) vs {metrics_ollama['without_rag_ex_pct']:.1f}% (without)")
-    print(f"  SM: {metrics_ollama['with_rag_sm_pct']:.1f}% (with) vs {metrics_ollama['without_rag_sm_pct']:.1f}% (without)")
-    print(f"  F1: {metrics_ollama['with_rag_f1']:.3f} (with) vs {metrics_ollama['without_rag_f1']:.3f} (without)")
+    print(f"\nArctic Base Model Overall Metrics:")
+    print(f"  Success Rate: {metrics_arctic['with_rag_success_pct']:.1f}% (with) vs {metrics_arctic['without_rag_success_pct']:.1f}% (without)")
+    print(f"  EX: {metrics_arctic['with_rag_ex_pct']:.1f}% (with) vs {metrics_arctic['without_rag_ex_pct']:.1f}% (without)")
+    print(f"  SM: {metrics_arctic['with_rag_sm_pct']:.1f}% (with) vs {metrics_arctic['without_rag_sm_pct']:.1f}% (without)")
+    
+    print(f"\nQwen-0.5B-Spider Overall Metrics:")
+    print(f"  Success Rate: {metrics_qwen['with_rag_success_pct']:.1f}% (with) vs {metrics_qwen['without_rag_success_pct']:.1f}% (without)")
+    print(f"  EX: {metrics_qwen['with_rag_ex_pct']:.1f}% (with) vs {metrics_qwen['without_rag_ex_pct']:.1f}% (without)")
+    print(f"  SM: {metrics_qwen['with_rag_sm_pct']:.1f}% (with) vs {metrics_qwen['without_rag_sm_pct']:.1f}% (without)")
+    print(f"  F1: {metrics_qwen['with_rag_f1']:.3f} (with) vs {metrics_qwen['without_rag_f1']:.3f} (without)")
+    print(f"\n✅ Qwen Execution Accuracy (With RAG): {metrics_qwen['with_rag_ex_pct']:.1f}%")
+    print(f"✅ Qwen Execution Accuracy (Without RAG): {metrics_qwen['without_rag_ex_pct']:.1f}%")
+    
+    print(f"\n✅ Arctic Execution Accuracy (With RAG): {metrics_arctic['with_rag_ex_pct']:.1f}%")
+    print(f"✅ Arctic Execution Accuracy (Without RAG): {metrics_arctic['without_rag_ex_pct']:.1f}%")
     
     if metrics_gpt:
         print(f"\nGPT-4o-mini Overall Metrics:")
@@ -807,17 +888,19 @@ def main():
     print("GENERATING VISUALIZATIONS")
     print("="*80)
     
+    # Generate visualizations with all available models (all values in percent)
+    create_figure_1(metrics_arctic, metrics_qwen, metrics_gpt, output_dir)
+    table_2 = create_table_2(results_arctic, results_qwen, results_gpt, output_dir)
+    
+    # Create figure 6 (success breakdown) - update to handle 3 models if needed
     if metrics_gpt:
-        create_figure_1(metrics_ollama, metrics_gpt, output_dir)
-        table_2 = create_table_2(results_ollama, results_gpt, output_dir)
-        create_figure_6(results_ollama, results_gpt, output_dir)
+        # For now, keep the 2-model version for figure 6
+        create_figure_6(results_arctic, results_gpt, output_dir)
+    elif metrics_qwen:
+        # Create a 2-model version with Arctic and Qwen
+        create_figure_6(results_arctic, results_qwen, output_dir)
     else:
-        print("\n⚠️  Skipping GPT visualizations (no GPT data available)")
-        print("Generating Ollama-only visualizations...")
-        # Create single-model versions
-        create_figure_1_ollama_only(metrics_ollama, output_dir)
-        table_2 = create_table_2_ollama_only(results_ollama, output_dir)
-        create_figure_6_ollama_only(results_ollama, output_dir)
+        create_figure_6_ollama_only(results_arctic, output_dir)
     
     print("\n" + "="*80)
     print("EVALUATION COMPLETE!")

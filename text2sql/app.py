@@ -370,7 +370,7 @@ def main_query_tab():
         model_name = st.text_input(
             "Model Name",
             value=os.getenv("MODEL_NAME", "openai/gpt-4o-mini"),
-            help="Format: 'ollama/arctic-finetuned' (port 11437) or 'openai/gpt-4o-mini'"
+            help="Format: 'ollama/qwen-0.5b-spider' (port 11438), 'ollama/arctic-base' (port 11437), or 'openai/gpt-4o-mini'"
         )
         db_url = st.text_input(
             "Database URL",
@@ -420,7 +420,7 @@ def main_query_tab():
                     schema = ""
                 st.info("🚫 RAG Disabled: Only table name provided. Model must infer column names from the question.")
             else:
-                schema = get_schema_snippet(question, engine)
+                schema = get_schema_snippet(question, engine, model_name=model_name)
                 
                 with st.expander("📋 Schema Snippet", expanded=False):
                     st.code(schema)

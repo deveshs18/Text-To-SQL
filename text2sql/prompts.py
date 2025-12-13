@@ -202,119 +202,448 @@ def is_complex_query(question: str) -> bool:
 
 def format_for_model(instruction, content, model_name):
     """
-    Format the prompt based on the model.
-    - Fine-tuned: Uses Alpaca format with specific instruction (matches training data).
-    - Others: Concatenates instruction and content.
+    Format the prompt based on model type:
+    - Base models (not fine-tuned): Use simpler, more instructional format
+    - GPT: Use instruction-based format (original GPT format)
+    - Arctic: Use simple SCHEMA: ... Q: ... SQL: (no hints, no extra guidance)
+    - Qwen Finetuned: Use exact training format SCHEMA: ... Q: ... SQL: (no hints, no extra guidance)
     """
     import os
-    # Check if using fine-tuned Arctic model (port 11437 - uses Alpaca format from training)
-    is_finetuned_arctic = (
-        "arctic" in model_name.lower() and "finetuned" in model_name.lower() or
-        os.getenv("OLLAMA_BASE_URL", "").endswith("11437")  # Fine-tuned Arctic server port
+    
+    # Detect model type
+    is_base_model = (
+        "qwen-0.5b-base" in model_name.lower() or
+        ("qwen" in model_name.lower() and "base" in model_name.lower() and "spider" not in model_name.lower())
     )
     
-    # Check if using fine-tuned model (either by model name or OLLAMA_BASE_URL)
-    is_finetuned = (
-        "finetuned" in model_name.lower() or 
-        is_finetuned_arctic  # Fine-tuned Arctic
+    is_gpt = "gpt" in model_name.lower() or "openai" in model_name.lower()
+    is_arctic = "arctic" in model_name.lower()
+    is_qwen_finetuned = (
+        "qwen-0.5b-spider" in model_name.lower() or
+        ("qwen" in model_name.lower() and "spider" in model_name.lower())
     )
     
-    if is_finetuned or is_finetuned_arctic:
-        # EXACT format from training data (prepare_spider_data.py line 70)
-        # Input must end with "\nSQL:" and Response should be just SQL
-        return f"""Below is an instruction that describes a task, paired with an input that provides further context. Write a response that appropriately completes the request.
+    # For base models: Use simpler, instructional format
+    if is_base_model:
+        # Extract schema and question
+        schema_match = re.search(r'SCHEMA:?\s*(.*?)(?=\n\s*(?:Q:|EXAMPLES:)|$)', content, re.DOTALL)
+        if schema_match:
+            schema_text = schema_match.group(1).strip()
+            # Remove hints (the | Note: parts) for base model
+            schema_text = re.sub(r'\s*\|\s*Note:.*$', '', schema_text, flags=re.IGNORECASE | re.MULTILINE)
+            schema_text = ' '.join(schema_text.split())
+        else:
+            if 'SCHEMA:' in content:
+                schema_text = content.split('SCHEMA:')[1].split('\n')[0].strip()
+                schema_text = re.sub(r'\s*\|\s*Note:.*$', '', schema_text, flags=re.IGNORECASE)
+            else:
+                schema_text = ""
+        
+        # Extract question
+        all_q_matches = list(re.finditer(r'Q:\s*(.*?)(?=\n\s*(?:SQL:|Q:|$))', content, re.DOTALL))
+        if all_q_matches:
+            question_text = all_q_matches[-1].group(1).strip()
+        else:
+            if 'Q:' in content:
+                q_parts = content.split('Q:')
+                if len(q_parts) > 1:
+                    last_q_part = q_parts[-1]
+                    question_text = last_q_part.split('SQL:')[0].strip() if 'SQL:' in last_q_part else last_q_part.strip()
+                else:
+                    question_text = ""
+            else:
+                question_text = ""
+        
+        # Build simpler format for base model (more instructional)
+        # Remove any thinking guidance for base model - it confuses it
+        question_clean = re.sub(r'Think step by step:.*$', '', question_text, flags=re.IGNORECASE | re.DOTALL).strip()
+        question_clean = re.sub(r'Break down.*$', '', question_clean, flags=re.IGNORECASE | re.DOTALL).strip()
+        question_clean = re.sub(r'Generate SQL and verify.*$', '', question_clean, flags=re.IGNORECASE | re.DOTALL).strip()
+        
+        # Simple format: instruction + schema + question
+        formatted_content = f"""You are a SQL expert. Generate a valid SQL query for the given question.
 
-### Instruction:
-{instruction}
+Database schema:
+{schema_text}
 
-### Input:
-{content}
-SQL:
+Question: {question_clean}
 
-### Response:
-"""
+SQL query:"""
+        
+        return formatted_content
+    
+    # For GPT: Use instruction-based format (original GPT format)
+    if is_gpt:
+        # Extract schema
+        schema_match = re.search(r'SCHEMA:?\s*(.*?)(?=\n\s*(?:Q:|EXAMPLES:)|$)', content, re.DOTALL)
+        if schema_match:
+            schema_text = schema_match.group(1).strip()
+            # Remove hints for GPT (they might confuse it)
+            schema_text = re.sub(r'\s*\|\s*Note:.*$', '', schema_text, flags=re.IGNORECASE | re.MULTILINE)
+            schema_text = ' '.join(schema_text.split())
+        else:
+            if 'SCHEMA:' in content:
+                schema_text = content.split('SCHEMA:')[1].split('\n')[0].strip()
+                schema_text = re.sub(r'\s*\|\s*Note:.*$', '', schema_text, flags=re.IGNORECASE)
+            else:
+                schema_text = ""
+        
+        # Check if examples are present (Few-Shot) - look for multiple Q: ... SQL: patterns
+        # Split content by Q: to find all question-SQL pairs
+        q_parts = content.split('Q:')
+        if len(q_parts) > 2:  # More than just schema and one question (has examples)
+            # Examples are present - extract them
+            examples_text = ""
+            # Process each Q: ... SQL: pair (skip first part which is SCHEMA:)
+            for i, part in enumerate(q_parts[1:-1], 1):  # Skip first (schema) and last (actual question)
+                # Split by SQL: to get question and SQL
+                if 'SQL:' in part:
+                    q_text, sql_part = part.split('SQL:', 1)
+                    q_text = q_text.strip()
+                    sql_text = sql_part.split('Q:')[0].strip() if 'Q:' in sql_part else sql_part.strip()
+                    # Remove any trailing Q: markers
+                    sql_text = sql_text.split('\nQ:')[0].strip()
+                    examples_text += f"\nExample {i}:\nQuestion: {q_text}\nSQL: {sql_text}"
+            
+            # Get the actual question (last Q:)
+            last_part = q_parts[-1]
+            question_text = last_part.split('SQL:')[0].strip() if 'SQL:' in last_part else last_part.strip()
+            question_text = re.sub(r'Think step by step:.*$', '', question_text, flags=re.IGNORECASE | re.DOTALL).strip()
+            question_text = re.sub(r'Break down.*$', '', question_text, flags=re.IGNORECASE | re.DOTALL).strip()
+            question_text = re.sub(r'Generate SQL and verify.*$', '', question_text, flags=re.IGNORECASE | re.DOTALL).strip()
+            
+            # GPT format with examples
+            formatted_content = f"""You are a SQL expert. Generate a valid SQL query for the given question.
+
+Database schema:
+{schema_text}
+{examples_text}
+
+Question: {question_text}
+
+SQL query:"""
+        else:
+            # No examples - simple format
+            # Extract question from content
+            if 'Q:' in content:
+                q_parts = content.split('Q:')
+                if len(q_parts) > 1:
+                    last_q_part = q_parts[-1]
+                    question_text = last_q_part.split('SQL:')[0].strip() if 'SQL:' in last_q_part else last_q_part.strip()
+                else:
+                    question_text = ""
+            else:
+                question_text = ""
+            
+            # Remove extra guidance text for GPT
+            question_text = re.sub(r'Think step by step:.*$', '', question_text, flags=re.IGNORECASE | re.DOTALL).strip()
+            question_text = re.sub(r'Break down.*$', '', question_text, flags=re.IGNORECASE | re.DOTALL).strip()
+            question_text = re.sub(r'Generate SQL and verify.*$', '', question_text, flags=re.IGNORECASE | re.DOTALL).strip()
+            
+            # GPT format: Instruction + schema + question
+            formatted_content = f"""You are a SQL expert. Generate a valid SQL query for the given question.
+
+Database schema:
+{schema_text}
+
+Question: {question_text}
+
+SQL query:"""
+        return formatted_content
+    
+    # For Arctic and Qwen Finetuned: Use simple SCHEMA: ... Q: ... SQL: format
+    # Extract schema part (everything after SCHEMA: until Q: or EXAMPLES:)
+    schema_match = re.search(r'SCHEMA:?\s*(.*?)(?=\n\s*(?:Q:|EXAMPLES:)|$)', content, re.DOTALL)
+    if schema_match:
+        schema_text = schema_match.group(1).strip()
+        # Remove hints for Arctic and Qwen (they weren't trained with hints)
+        schema_text = re.sub(r'\s*\|\s*Note:.*$', '', schema_text, flags=re.IGNORECASE | re.MULTILINE)
+        # Remove newlines and extra whitespace, make single line
+        schema_text = ' '.join(schema_text.split())
     else:
-        return f"{instruction}\n\n{content}\n\nSQL:"
+        # Fallback: try to extract from content
+        if 'SCHEMA:' in content:
+            schema_text = content.split('SCHEMA:')[1].split('\n')[0].strip()
+            schema_text = re.sub(r'\s*\|\s*Note:.*$', '', schema_text, flags=re.IGNORECASE)
+        else:
+            schema_text = ""
+    
+    # Extract question (Q: ...)
+    # IMPORTANT: If examples are present, extract the LAST Q: (the actual question)
+    all_q_matches = list(re.finditer(r'Q:\s*(.*?)(?=\n\s*(?:SQL:|Q:|$))', content, re.DOTALL))
+    if all_q_matches:
+        # Get the LAST question (the actual one, after examples)
+        question_match = all_q_matches[-1]
+        question_text = question_match.group(1).strip()
+        # Remove extra guidance text (Arctic and Qwen weren't trained with this)
+        question_text = re.sub(r'Think step by step:.*$', '', question_text, flags=re.IGNORECASE | re.DOTALL).strip()
+        question_text = re.sub(r'Break down.*$', '', question_text, flags=re.IGNORECASE | re.DOTALL).strip()
+        question_text = re.sub(r'Generate SQL and verify.*$', '', question_text, flags=re.IGNORECASE | re.DOTALL).strip()
+    else:
+        # Fallback
+        if 'Q:' in content:
+            q_parts = content.split('Q:')
+            if len(q_parts) > 1:
+                last_q_part = q_parts[-1]
+                question_text = last_q_part.split('SQL:')[0].strip() if 'SQL:' in last_q_part else last_q_part.strip()
+                question_text = re.sub(r'Think step by step:.*$', '', question_text, flags=re.IGNORECASE | re.DOTALL).strip()
+                question_text = re.sub(r'Break down.*$', '', question_text, flags=re.IGNORECASE | re.DOTALL).strip()
+                question_text = re.sub(r'Generate SQL and verify.*$', '', question_text, flags=re.IGNORECASE | re.DOTALL).strip()
+            else:
+                question_text = ""
+        else:
+            question_text = ""
+    
+    # Build simple format: SCHEMA: ... Q: ... SQL: (no hints, no extra guidance)
+    if '\nQ:' in content and content.count('Q:') > 1:
+        # Examples are present (for Few-Shot)
+        # The content already has the format: SCHEMA: ... Q: example1 SQL: sql1 Q: actual_question
+        # We just need to ensure it ends with SQL: and remove any hints
+        formatted_content = content.strip()
+        # Remove hints
+        formatted_content = re.sub(r'\s*\|\s*Note:.*$', '', formatted_content, flags=re.IGNORECASE | re.MULTILINE)
+        # Ensure it ends with SQL: (not just Q:)
+        if not formatted_content.rstrip().endswith('SQL:'):
+            # If it ends with just Q: question_text, add SQL:
+            if formatted_content.rstrip().endswith(question_text):
+                formatted_content = formatted_content.rstrip() + '\nSQL:'
+            else:
+                formatted_content = formatted_content.rstrip() + '\nSQL:'
+    else:
+        # No examples, simple format
+        formatted_content = f"SCHEMA: {schema_text}\nQ: {question_text}\nSQL:"
+    
+    return formatted_content
+    
+    # OLD CODE (kept for reference, but now all models use standardized format above)
+    if False:  # This block never executes, kept for reference
+        is_qwen = "qwen" in model_name.lower()
+        # Qwen was trained on exact format: SCHEMA: table1(col1, col2) | table2(col3, col4)
+        # Q: question
+        # SQL: sql
+        # Remove any instruction text, remove EXAMPLES: header, ensure single-line SCHEMA
+        
+        # Extract schema part (everything after SCHEMA: until Q: or EXAMPLES:)
+        schema_match = re.search(r'SCHEMA:?\s*(.*?)(?=\n\s*(?:Q:|EXAMPLES:)|$)', content, re.DOTALL)
+        if schema_match:
+            schema_text = schema_match.group(1).strip()
+            # Remove newlines and extra whitespace, make single line
+            schema_text = ' '.join(schema_text.split())
+        else:
+            # Fallback: try to extract from content
+            if 'SCHEMA:' in content:
+                schema_text = content.split('SCHEMA:')[1].split('\n')[0].strip()
+            else:
+                schema_text = ""
+        
+        # Extract question (Q: ...)
+        # IMPORTANT: If examples are present, extract the LAST Q: (the actual question)
+        # If no examples, extract the first Q:
+        all_q_matches = list(re.finditer(r'Q:\s*(.*?)(?=\n\s*(?:SQL:|Q:|$))', content, re.DOTALL))
+        if all_q_matches:
+            # Get the LAST question (the actual one, after examples)
+            question_match = all_q_matches[-1]
+            question_text = question_match.group(1).strip()
+        else:
+            # Fallback
+            if 'Q:' in content:
+                # Split by Q: and take the last one (actual question)
+                q_parts = content.split('Q:')
+                if len(q_parts) > 1:
+                    # Get the last Q: part, then extract until SQL: or end
+                    last_q_part = q_parts[-1]
+                    question_text = last_q_part.split('SQL:')[0].strip() if 'SQL:' in last_q_part else last_q_part.strip()
+                else:
+                    question_text = ""
+            else:
+                question_text = ""
+        
+        # This code is now replaced by standardized format above
+        pass
 
 def build_few_shot_prompt(schema, question, examples=None, model_name=""):
-    """Build Few-Shot prompt."""
+    """Build Few-Shot prompt - Model-specific format."""
     # schema is already a string from get_schema_snippet, use it directly
     schema_text = schema if isinstance(schema, str) else str(schema)
     
-    # Match training data instruction exactly
-    instruction = "You are a powerful text-to-SQL model. Your job is to generate valid SQL queries for the given schema and question."
+    # Detect model type
+    is_base_model = (
+        "qwen-0.5b-base" in model_name.lower() or
+        ("qwen" in model_name.lower() and "base" in model_name.lower() and "spider" not in model_name.lower())
+    )
     
-    content = f"SCHEMA:\n{schema_text}\n"
-    if examples:
-        formatted_examples = []
-        for ex in examples:
-            if isinstance(ex, dict):
-                formatted_examples.append(f"Q: {ex.get('question', '')}\nSQL: {ex.get('sql', '')}")
-            else:
-                formatted_examples.append(str(ex))
-        content += "\nEXAMPLES:\n" + "\n\n".join(formatted_examples)
+    # Detect model type
+    is_gpt = "gpt" in model_name.lower() or "openai" in model_name.lower()
     
-    content += f"\n\nQ: {question}"
-    
-    return format_for_model(instruction, content, model_name)
+    if is_base_model:
+        # Base model: Simpler format, no hints, no examples (they confuse it)
+        # Make schema single-line, remove hints
+        schema_clean = re.sub(r'\s*\|\s*Note:.*$', '', schema_text, flags=re.IGNORECASE | re.MULTILINE)
+        schema_single_line = ' '.join(schema_clean.split())
+        content = f"SCHEMA: {schema_single_line}\nQ: {question}"
+        # format_for_model will handle base model formatting
+        return format_for_model("", content, model_name)
+    elif is_gpt:
+        # GPT: No hints, but can use examples
+        schema_clean = re.sub(r'\s*\|\s*Note:.*$', '', schema_text, flags=re.IGNORECASE | re.MULTILINE)
+        schema_single_line = ' '.join(schema_clean.split())
+        content = f"SCHEMA: {schema_single_line}"
+        
+        # Add examples if provided (for Few-Shot)
+        if examples:
+            for ex in examples:
+                if isinstance(ex, dict):
+                    content += f"\nQ: {ex.get('question', '')}\nSQL: {ex.get('sql', '')}"
+                else:
+                    content += f"\n{ex}"
+        
+        # Add the actual question
+        content += f"\nQ: {question}"
+        
+        # format_for_model will convert to GPT format
+        return format_for_model("", content, model_name)
+    else:
+        # Arctic and Qwen Finetuned: No hints, but can use examples
+        # Make schema single-line, remove hints
+        schema_clean = re.sub(r'\s*\|\s*Note:.*$', '', schema_text, flags=re.IGNORECASE | re.MULTILINE)
+        schema_single_line = ' '.join(schema_clean.split())
+        content = f"SCHEMA: {schema_single_line}"
+        
+        # Add examples if provided (for Few-Shot)
+        if examples:
+            for ex in examples:
+                if isinstance(ex, dict):
+                    content += f"\nQ: {ex.get('question', '')}\nSQL: {ex.get('sql', '')}"
+                else:
+                    content += f"\n{ex}"
+        
+        # Add the actual question
+        content += f"\nQ: {question}"
+        
+        # Use simple format (SCHEMA: ... Q: ... SQL:)
+        return format_for_model("", content, model_name)
 
 def build_cot_prompt(schema, question, model_name=""):
-    """Build Chain-of-Thought prompt."""
+    """Build Chain-of-Thought prompt - Model-specific format."""
     # schema is already a string from get_schema_snippet, use it directly
     schema_text = schema if isinstance(schema, str) else str(schema)
     
-    instruction = "You are a powerful text-to-SQL model. Your job is to generate valid SQL queries for the given schema and question."
+    # Detect model type
+    is_base_model = (
+        "qwen-0.5b-base" in model_name.lower() or
+        ("qwen" in model_name.lower() and "base" in model_name.lower() and "spider" not in model_name.lower())
+    )
     
-    # For fine-tuned: match training format (SCHEMA: ... Q: ...)
-    # CoT reasoning can be in the instruction or after Q:
-    content = f"""SCHEMA:
-{schema_text}
-
-Q: {question}"""
-
-    return format_for_model(instruction, content, model_name)
+    # Detect model type
+    is_gpt = "gpt" in model_name.lower() or "openai" in model_name.lower()
+    
+    if is_base_model:
+        # Base model: Simpler CoT, no hints
+        schema_clean = re.sub(r'\s*\|\s*Note:.*$', '', schema_text, flags=re.IGNORECASE | re.MULTILINE)
+        schema_single_line = ' '.join(schema_clean.split())
+        content = f"SCHEMA: {schema_single_line}\nQ: {question}"
+        # format_for_model will add simpler instruction for base model
+        return format_for_model("", content, model_name)
+    elif is_gpt:
+        # GPT: Simple CoT (no extra guidance text, GPT handles it naturally)
+        schema_clean = re.sub(r'\s*\|\s*Note:.*$', '', schema_text, flags=re.IGNORECASE | re.MULTILINE)
+        schema_single_line = ' '.join(schema_clean.split())
+        content = f"SCHEMA: {schema_single_line}\nQ: {question}"
+        return format_for_model("", content, model_name)
+    else:
+        # Arctic and Qwen Finetuned: Simple format (no extra guidance - they weren't trained with it)
+        schema_clean = re.sub(r'\s*\|\s*Note:.*$', '', schema_text, flags=re.IGNORECASE | re.MULTILINE)
+        schema_single_line = ' '.join(schema_clean.split())
+        content = f"SCHEMA: {schema_single_line}\nQ: {question}"
+        return format_for_model("", content, model_name)
 
 def build_ltm_prompt(schema, question, model_name=""):
-    """Build Least-to-Most prompt."""
+    """Build Least-to-Most prompt - Model-specific format."""
     # schema is already a string from get_schema_snippet, use it directly
     schema_text = schema if isinstance(schema, str) else str(schema)
     
-    instruction = "You are a powerful text-to-SQL model. Your job is to generate valid SQL queries for the given schema and question."
+    # Detect model type
+    is_base_model = (
+        "qwen-0.5b-base" in model_name.lower() or
+        ("qwen" in model_name.lower() and "base" in model_name.lower() and "spider" not in model_name.lower())
+    )
     
-    # Match training format: SCHEMA: ... Q: ...
-    content = f"""SCHEMA:
-{schema_text}
-
-Q: {question}"""
-
-    return format_for_model(instruction, content, model_name)
+    # Detect model type
+    is_gpt = "gpt" in model_name.lower() or "openai" in model_name.lower()
+    
+    if is_base_model:
+        # Base model: Simpler LtM, no hints
+        schema_clean = re.sub(r'\s*\|\s*Note:.*$', '', schema_text, flags=re.IGNORECASE | re.MULTILINE)
+        schema_single_line = ' '.join(schema_clean.split())
+        content = f"SCHEMA: {schema_single_line}\nQ: {question}"
+        # format_for_model will add simpler instruction for base model
+        return format_for_model("", content, model_name)
+    elif is_gpt:
+        # GPT: Simple LtM (no extra guidance text, GPT handles it naturally)
+        schema_clean = re.sub(r'\s*\|\s*Note:.*$', '', schema_text, flags=re.IGNORECASE | re.MULTILINE)
+        schema_single_line = ' '.join(schema_clean.split())
+        content = f"SCHEMA: {schema_single_line}\nQ: {question}"
+        return format_for_model("", content, model_name)
+    else:
+        # Arctic and Qwen Finetuned: Simple format (no extra guidance - they weren't trained with it)
+        schema_clean = re.sub(r'\s*\|\s*Note:.*$', '', schema_text, flags=re.IGNORECASE | re.MULTILINE)
+        schema_single_line = ' '.join(schema_clean.split())
+        content = f"SCHEMA: {schema_single_line}\nQ: {question}"
+        return format_for_model("", content, model_name)
 
 def build_eg_prompt(schema, question, model_name=""):
-    """Build Execution-Guided prompt."""
+    """Build Execution-Guided prompt - Model-specific format."""
     # schema is already a string from get_schema_snippet, use it directly
     schema_text = schema if isinstance(schema, str) else str(schema)
     
-    instruction = "You are a powerful text-to-SQL model. Your job is to generate valid SQL queries for the given schema and question."
+    # Detect model type
+    is_base_model = (
+        "qwen-0.5b-base" in model_name.lower() or
+        ("qwen" in model_name.lower() and "base" in model_name.lower() and "spider" not in model_name.lower())
+    )
     
-    # Match training format: SCHEMA: ... Q: ...
-    content = f"SCHEMA:\n{schema_text}\n\nQ: {question}"
+    # Detect model type
+    is_gpt = "gpt" in model_name.lower() or "openai" in model_name.lower()
     
-    return format_for_model(instruction, content, model_name)
+    if is_base_model:
+        # Base model: Simpler EG, no hints
+        schema_clean = re.sub(r'\s*\|\s*Note:.*$', '', schema_text, flags=re.IGNORECASE | re.MULTILINE)
+        schema_single_line = ' '.join(schema_clean.split())
+        content = f"SCHEMA: {schema_single_line}\nQ: {question}"
+        # format_for_model will add simpler instruction for base model
+        return format_for_model("", content, model_name)
+    elif is_gpt:
+        # GPT: Simple EG (no extra guidance text, GPT handles it naturally)
+        schema_clean = re.sub(r'\s*\|\s*Note:.*$', '', schema_text, flags=re.IGNORECASE | re.MULTILINE)
+        schema_single_line = ' '.join(schema_clean.split())
+        content = f"SCHEMA: {schema_single_line}\nQ: {question}"
+        return format_for_model("", content, model_name)
+    else:
+        # Arctic and Qwen Finetuned: Simple format (no extra guidance - they weren't trained with it)
+        schema_clean = re.sub(r'\s*\|\s*Note:.*$', '', schema_text, flags=re.IGNORECASE | re.MULTILINE)
+        schema_single_line = ' '.join(schema_clean.split())
+        content = f"SCHEMA: {schema_single_line}\nQ: {question}"
+        return format_for_model("", content, model_name)
 
 def build_refine_prompt(schema, question, previous_sql, error_msg, model_name=""):
-    """Build Refinement prompt."""
+    """Build Refinement prompt - Model-specific format."""
     # schema is already a string from get_schema_snippet, use it directly
     schema_text = schema if isinstance(schema, str) else str(schema)
     
-    instruction = "You are a powerful text-to-SQL model. Your job is to generate valid SQL queries for the given schema and question. The previous SQL query failed with an error. Fix the SQL query based on the error message."
+    # Detect model type
+    is_base_model = (
+        "qwen-0.5b-base" in model_name.lower() or
+        ("qwen" in model_name.lower() and "base" in model_name.lower() and "spider" not in model_name.lower())
+    )
     
-    # Match training format: SCHEMA: ... Q: ...
-    content = f"""SCHEMA:
-{schema_text}
-
-Q: {question}
-
-Failed SQL: {previous_sql}
-Error: {error_msg}"""
-
-    return format_for_model(instruction, content, model_name)
+    if is_base_model:
+        # Base model: Simpler refinement format
+        schema_clean = re.sub(r'\s*\|\s*Note:.*$', '', schema_text, flags=re.IGNORECASE | re.MULTILINE)
+        schema_single_line = ' '.join(schema_clean.split())
+        content = f"SCHEMA: {schema_single_line}\nQ: {question}\nFailed SQL: {previous_sql}\nError: {error_msg}"
+        return format_for_model("Fix the SQL query based on the error message.", content, model_name)
+    else:
+        # Finetuned models: Standardized format
+        schema_single_line = ' '.join(schema_text.split())
+        content = f"SCHEMA: {schema_single_line}\nQ: {question}\nFailed SQL: {previous_sql}\nError: {error_msg}\nFix the SQL query based on the error message."
+        return format_for_model("", content, model_name)

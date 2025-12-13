@@ -337,6 +337,112 @@ If you want to fine-tune the Arctic model or train a completely new model:
 
 **For complete instructions on training, server setup, and model switching, see `TRAINING_AND_SWITCHING_MODELS.md`**
 
+## Running Qwen 0.5 Model
+
+### Qwen 0.5 Finetuned Model
+
+**1. Start the Finetuned Model Server:**
+
+```bash
+python text2sql/scripts/qwen_server.py
+```
+
+The server will:
+- Load the base Qwen model (Qwen/Qwen2.5-Coder-0.5B) from Hugging Face on first run
+- Load LoRA adapters from `qwen0p5b-spider-lora/` (included in repository)
+- Start serving on `http://localhost:11438`
+
+**2. Configure the app:**
+
+Update `.env`:
+```bash
+MODEL_NAME=ollama/qwen-0.5b-spider
+OLLAMA_BASE_URL=http://localhost:11438
+```
+
+### Qwen 0.5 Base Model (Baseline)
+
+**1. Start the Base Model Server:**
+
+```bash
+python text2sql/scripts/qwen_base_server.py
+```
+
+The server will:
+- Load the base Qwen model directly from Hugging Face (no LoRA adapters)
+- Start serving on `http://localhost:11439`
+
+**2. Configure the app:**
+
+Update `.env`:
+```bash
+MODEL_NAME=ollama/qwen-0.5b-base
+OLLAMA_BASE_URL=http://localhost:11439
+```
+
+## Test Evaluation
+
+### Compare Qwen Base vs Finetuned
+
+To compare the Qwen 0.5 base model against the finetuned model:
+
+**1. Start both servers:**
+
+Terminal 1 (Finetuned):
+```bash
+python text2sql/scripts/qwen_server.py
+```
+
+Terminal 2 (Base):
+```bash
+python text2sql/scripts/qwen_base_server.py
+```
+
+**2. Run the comparison:**
+
+```bash
+python text2sql/scripts/test_qwen_baseline_comparison.py
+```
+
+This will:
+- Evaluate both models on 35 test cases
+- Test all 4 prompt techniques (Few-Shot, CoT, LtM, EG)
+- Compare execution accuracy, latency, and success rates
+- Save results to `text2sql/scripts/data/results/`
+
+### Other Evaluation Scripts
+
+**Compare RAG Impact:**
+```bash
+python text2sql/scripts/compare_rag.py
+```
+
+**Generate Comprehensive Evaluation:**
+```bash
+python text2sql/scripts/generate_100_evaluation.py
+```
+
+## Pushing Code
+
+To push the code with the finetuned model for others to test:
+
+```bash
+# Add new files
+git add text2sql/scripts/qwen*.py
+git add text2sql/scripts/test_qwen*.py
+git add text2sql/model_client.py
+git add .gitignore
+git add qwen0p5b-spider-lora/
+
+# Commit
+git commit -m "Add Qwen 0.5 baseline testing and finetuned model"
+
+# Push
+git push
+```
+
+**Note:** The finetuned model adapter (~16.5 MB) is included in the repository. Checkpoints are excluded via `.gitignore`.
+
 ## Evaluation Scripts
 
 ### Compare RAG Impact
